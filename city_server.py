@@ -1,11 +1,15 @@
+from pathlib import Path
 import json
 
 
 
 
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, request, session, redirect, url_for
+from datetime import datetime
+import hashlib
+import secrets
 from city_core import get_city_context
-from city_chat import load_chat
+from city_chat import load_chat, send_message
 
 
 def load_city_state():
@@ -23,6 +27,17 @@ def load_city_state():
 
 
 app = Flask(__name__)
+SECRET_KEY_FILE = Path(".ai_city_secret_key")
+
+if SECRET_KEY_FILE.exists():
+    app.secret_key = SECRET_KEY_FILE.read_text(encoding="utf-8").strip()
+else:
+    app.secret_key = secrets.token_hex(32)
+    SECRET_KEY_FILE.write_text(app.secret_key, encoding="utf-8")
+    try:
+        os.chmod(SECRET_KEY_FILE, 0o600)
+    except OSError:
+        pass
 
 HTML = """
 <!DOCTYPE html>
@@ -811,7 +826,7 @@ body {
 .city-menu-footer {
     position: absolute;
     bottom: 24px;
-    left: 22px;
+    left: 8px;
 
     font-size: 11px;
     opacity: 0.4;
@@ -999,7 +1014,7 @@ body {
 }
 
 .status-item {
-    padding: 18px 12px;
+    padding: 11px 8px;
     border-radius: 15px;
     background: rgba(5,15,28,0.68);
     border: 1px solid rgba(120,190,255,0.12);
@@ -1069,7 +1084,333 @@ body {
 @media (orientation: landscape) and (max-height: 600px) {
 
     /* LEFT PANEL */
-    .ai-city-side {
+    
+/* ============================================================
+   AI CITY HAMBURGER MENU V1
+   ============================================================ */
+
+.ai-city-hamburger,
+#aiCityHamburgerButton {
+    pointer-events: auto !important;
+    position: fixed !important;
+    z-index: 110000 !important;
+    touch-action: manipulation !important;
+}
+
+#aiCityHamburgerButton {
+    isolation: isolate;
+}
+
+/* HAMBURGER CLICK SAFETY */
+#aiCityMapPanel .ai-city-hamburger {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+#aiCityMapPanel .ai-city-hamburger span {
+    pointer-events: none !important;
+}
+
+#aiCityMapPanel .ai-city-menu-backdrop {
+    pointer-events: none;
+}
+
+#aiCityMapPanel .ai-city-menu-backdrop.open {
+    pointer-events: auto;
+}
+
+.ai-city-menu-backdrop {
+    z-index: 109990 !important;
+}
+
+.ai-city-hamburger-panel {
+    z-index: 2147483646 !important;
+}
+
+.ai-city-hamburger,
+#aiCityHamburgerButton {
+    pointer-events: auto !important;
+    position: fixed !important;
+    z-index: 110000 !important;
+    touch-action: manipulation !important;
+}
+
+#aiCityHamburgerButton {
+    isolation: isolate;
+}
+
+.ai-city-menu-backdrop {
+    z-index: 109990 !important;
+}
+
+.ai-city-hamburger-panel {
+    z-index: 2147483646 !important;
+}
+
+.ai-city-hamburger {
+    position: fixed;
+    left: 16px;
+    top: 88px;
+    z-index: 10020;
+    width: 46px;
+    height: 46px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 0;
+    border: 1px solid rgba(0,190,255,.58);
+    border-radius: 10px;
+    background: rgba(1,15,29,.88);
+    box-shadow:
+        0 0 18px rgba(0,120,255,.16),
+        inset 0 0 12px rgba(0,120,255,.08);
+    backdrop-filter: blur(8px);
+    cursor: pointer;
+}
+
+.ai-city-hamburger span {
+    display: block;
+    width: 20px;
+    height: 2px;
+    border-radius: 2px;
+    background: #bdefff;
+    box-shadow: 0 0 7px rgba(0,190,255,.45);
+}
+
+.ai-city-hamburger:hover {
+    background: rgba(0,50,78,.92);
+    border-color: rgba(0,220,255,.8);
+}
+
+.ai-city-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10010;
+    background: rgba(0,0,0,.42);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity .2s ease, visibility .2s ease;
+}
+
+.ai-city-menu-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.ai-city-hamburger-panel {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 10015;
+    width: min(320px, 84vw);
+    overflow-y: auto;
+    padding: 18px 14px 24px;
+    box-sizing: border-box;
+    background:
+        linear-gradient(
+            180deg,
+            rgba(2,18,35,.98),
+            rgba(1,11,22,.98)
+        );
+    border-right: 1px solid rgba(0,180,255,.28);
+    box-shadow: 12px 0 40px rgba(0,0,0,.38);
+    transform: translateX(-105%);
+    transition: transform .22s ease;
+}
+
+.ai-city-hamburger-panel.open {
+    transform: translateX(0);
+}
+
+.ai-city-hamburger-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 54px;
+    margin-bottom: 12px;
+    padding: 0 4px 12px;
+    border-bottom: 1px solid rgba(0,170,255,.16);
+}
+
+.ai-city-hamburger-title {
+    color: #e8faff;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+.ai-city-hamburger-subtitle {
+    margin-top: 3px;
+    color: #54c9f5;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+}
+
+.ai-city-hamburger-close {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(0,180,255,.3);
+    border-radius: 8px;
+    background: rgba(0,60,90,.28);
+    color: #c8f4ff;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ai-city-hamburger-close:hover {
+    background: rgba(0,120,170,.38);
+}
+
+.ai-city-hamburger-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ai-city-hamburger-menu .ai-city-nav-item {
+    position: relative;
+    width: 100%;
+    min-height: 43px;
+    box-sizing: border-box;
+    padding: 0 13px;
+    gap: 12px;
+    border-radius: 9px;
+    text-decoration: none;
+}
+
+.ai-city-hamburger-menu .ai-city-nav-item:hover {
+    background: rgba(0,115,170,.17);
+}
+
+button.ai-city-nav-item {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    color: inherit;
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+.ai-city-execute-function-button {
+    background: rgba(0,105,165,.25) !important;
+    color: #dff7ff !important;
+    border: 1px solid rgba(0,175,240,.24) !important;
+    border-radius: 9px !important;
+    min-height: 43px !important;
+    box-sizing: border-box;
+}
+
+.ai-city-execute-function-button:hover,
+.ai-city-execute-function-button:focus,
+.ai-city-execute-function-button:focus-visible,
+.ai-city-execute-function-button:active {
+    background: rgba(0,115,170,.38) !important;
+    color: #dff7ff !important;
+    border-color: rgba(0,175,240,.40) !important;
+    outline: none !important;
+}
+
+.ai-city-hamburger-menu .ai-city-nav-item.active {
+    background: rgba(0,105,165,.25);
+    border: 1px solid rgba(0,175,240,.24);
+}
+
+.ai-city-hamburger-menu .ai-city-nav-item-future {
+    opacity: .82;
+}
+
+.ai-city-hamburger-menu .ai-city-nav-item small {
+    margin-left: auto;
+    color: #55bddd;
+    font-size: 8px;
+    letter-spacing: 1px;
+}
+
+.ai-city-menu-divider {
+    width: 100%;
+    height: 1px;
+    margin: 8px 0;
+    background: rgba(0,170,255,.13);
+}
+
+.ai-city-menu-section-label {
+    padding: 4px 10px 6px;
+    color: #4fb9df;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 1.8px;
+}
+
+.ai-city-menu-movement {
+    padding: 3px 0;
+}
+
+.ai-city-menu-movement .ai-city-movement {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.ai-city-menu-movement .ai-city-movement-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.ai-city-menu-movement .ai-city-movement select {
+    width: 100%;
+    min-width: 0;
+}
+
+.ai-city-menu-movement .ai-city-movement button {
+    grid-column: 1 / -1;
+    width: 100%;
+}
+
+/* Old permanent sidebar is disabled */
+.ai-city-side {
+    display: none !important;
+}
+
+@media (max-width: 620px) {
+    .ai-city-hamburger {
+        left: 12px;
+        top: 86px;
+        width: 42px;
+        height: 42px;
+    }
+
+    .ai-city-hamburger-panel {
+        width: min(300px, 88vw);
+    }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+    .ai-city-hamburger {
+        top: 62px;
+        width: 40px;
+        height: 40px;
+    }
+
+    .ai-city-hamburger-panel {
+        width: min(300px, 52vw);
+    }
+}
+
+
+.ai-city-side {
         width: 125px !important;
         top: 58px !important;
         bottom: 48px !important;
@@ -1435,6 +1776,185 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
     filter: saturate(1.04) contrast(1.03);
 }
 
+/* =========================================================
+   AI CITY V3 — AGENT LOCATION / PRESENCE LAYER
+   ========================================================= */
+
+/* AI CITY V3 — DISTRICT-002 RESIDENTIAL */
+.ai-city-map-v3-districts {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.ai-city-map-v3-district {
+  position: absolute;
+  pointer-events: none;
+}
+
+.ai-city-map-v3-district.district-002 {
+  left: 64.62%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+}
+
+.ai-city-map-v3-district-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.ai-city-map-v3-district-icon {
+  display: none;
+}
+
+@keyframes aiCityDistrictPulse {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+.ai-city-map-v3-district-label strong {
+  font-size: 11px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ai-city-map-v3-district-label small {
+  margin-top: 2px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  opacity: 0.65;
+}
+
+/* AI CITY V3 — AGENT LOCATION LAYER */
+.ai-city-map-v3-agents {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    pointer-events: none;
+    transform-origin: center center;
+}
+
+.ai-city-map-v3-agent {
+    position: absolute;
+    width: 120px;
+    text-align: center;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+/* City Center agent positions — ID based */
+.ai-city-map-v3-agent.agent-agent-001 {
+    left: 50%;
+    top: 42%;
+    z-index: 999;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.ai-city-map-v3-agent.agent-agent-002 {
+    left: 50%;
+    top: 49%;
+    z-index: 999;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.ai-city-map-v3-agent.agent-agent-003 {
+    left: 40%;
+    top: 57%;
+}
+
+.ai-city-map-v3-agent.agent-agent-004 {
+    left: 47%;
+    top: 62%;
+}
+
+.ai-city-map-v3-agent.agent-agent-005 {
+    left: 54%;
+    top: 62%;
+}
+
+.ai-city-map-v3-agent.agent-agent-006 {
+    left: 61%;
+    top: 57%;
+}
+
+.ai-city-map-v3-agent-marker {
+    width: 14px;
+    height: 14px;
+    margin: 0 auto 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ai-city-map-v3-presence {
+    display: block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    animation: aiCityV3PresenceBlink 1.2s infinite;
+}
+
+.ai-city-map-v3-presence.online {
+    background: #00ff66;
+    box-shadow:
+        0 0 5px #00ff66,
+        0 0 10px #00ff66;
+}
+
+.ai-city-map-v3-presence.offline {
+    background: #ff3030;
+    box-shadow:
+        0 0 5px #ff3030,
+        0 0 10px #ff3030;
+}
+
+.ai-city-map-v3-agent-label {
+    display: inline-block;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-shadow:
+        -1px -1px 0 #061018,
+         1px -1px 0 #061018,
+        -1px  1px 0 #061018,
+         1px  1px 0 #061018,
+         0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+.ai-city-map-v3-agent-id {
+    display: none;
+}
+
+@keyframes aiCityV3PresenceBlink {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.35;
+        transform: scale(0.72);
+    }
+}
+
 .ai-city-map-v3-vignette {
     position: absolute;
     inset: 0;
@@ -1714,6 +2234,72 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
     text-shadow: 0 0 12px rgba(0,183,255,.8);
 }
 
+
+.ai-city-movement {
+    position: absolute;
+    left: 18px;
+    bottom: 92px;
+    z-index: 26;
+    width: 190px;
+    padding: 10px;
+    border: 1px solid rgba(0,155,255,.55);
+    border-radius: 12px;
+    background: rgba(1,18,35,.82);
+    box-shadow: 0 0 18px rgba(0,120,255,.12);
+    backdrop-filter: blur(6px);
+}
+
+.ai-city-movement-title {
+    margin-bottom: 7px;
+    color: #72d7ff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.ai-city-movement-row {
+    display: flex;
+    gap: 6px;
+}
+
+.ai-city-movement select {
+    flex: 1;
+    min-width: 0;
+    height: 31px;
+    padding: 0 7px;
+    border: 1px solid rgba(0,155,255,.42);
+    border-radius: 7px;
+    background: rgba(2,18,34,.9);
+    color: #c9efff;
+    font-size: 11px;
+    outline: none;
+}
+
+.ai-city-movement button {
+    height: 31px;
+    padding: 0 10px;
+    border: 1px solid rgba(0,190,255,.65);
+    border-radius: 7px;
+    background: rgba(0,105,170,.45);
+    color: #d9f6ff;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ai-city-movement button:hover {
+    background: rgba(0,145,215,.58);
+}
+
+@media (max-width: 620px) {
+    .ai-city-movement {
+        left: 68px;
+        bottom: 92px;
+        width: 175px;
+    }
+}
+
 .ai-city-zoom {
     position: absolute;
     right: 18px;
@@ -1788,6 +2374,32 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
     .ai-city-side { top: 90px; width: 58px; background: rgba(1,12,25,.78); }
     .ai-city-nav-item { justify-content: center; padding: 0; }
     .ai-city-nav-item span:not(.nav-icon) { display: none; }
+
+    /* AI CITY MAP V3 — HAMBURGER TEXT RESTORE */
+    #aiCityMapPanel .ai-city-hamburger-menu .ai-city-nav-item {
+        justify-content: flex-start !important;
+        min-height: 30px !important;
+        height: 30px !important;
+        padding: 0 7px !important;
+        gap: 6px !important;
+        font-size: 10px !important;
+    }
+
+    #aiCityMapPanel .ai-city-hamburger-menu .ai-city-nav-item span:not(.nav-icon) {
+        display: inline !important;
+    }
+
+    #aiCityMapPanel .ai-city-hamburger-menu .ai-city-nav-item .nav-icon {
+        display: inline-flex !important;
+        flex: 0 0 auto !important;
+        width: 16px !important;
+        font-size: 13px !important;
+    }
+
+    #aiCityMapPanel .ai-city-hamburger-menu .ai-city-nav-item small {
+        display: inline !important;
+    }
+
     .ai-city-bottom { left: 68px; }
     .ai-city-overview { width: 47px; flex-basis: 47px; }
     .ai-city-agent-card { width: 38px; flex-basis: 38px; }
@@ -2006,6 +2618,821 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
     }
 }
 
+
+/* ============================================================
+   AI CITY HAMBURGER — FINAL TOP LAYER
+   ============================================================ */
+
+#aiCityMapPanel #aiCityHamburgerButton {
+    position: fixed !important;
+    left: 16px !important;
+    top: 88px !important;
+    width: 46px !important;
+    height: 46px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    cursor: pointer !important;
+
+    isolation: isolate !important;
+}
+
+#aiCityMapPanel #aiCityHamburgerButton span {
+    pointer-events: none !important;
+}
+
+#aiCityMapPanel .ai-city-hamburger-panel {
+    z-index: 2147483646 !important;
+}
+
+#aiCityMapPanel .ai-city-menu-backdrop {
+    z-index: 2147483645 !important;
+}
+
+@media (max-width: 620px) {
+    #aiCityMapPanel #aiCityHamburgerButton {
+        left: 12px !important;
+        top: 86px !important;
+        width: 42px !important;
+        height: 42px !important;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+    #aiCityMapPanel #aiCityHamburgerButton {
+        top: 62px !important;
+        width: 40px !important;
+        height: 40px !important;
+    }
+}
+
+
+
+
+
+
+
+/* AI CITY MAP V3 — RESTORE FINAL BOTTOM LAYOUT */
+#aiCityMapPanel .ai-city-movement {
+    left:18px !important;
+    bottom:112px !important;
+    width:190px !important;
+    z-index:40 !important;
+}
+
+#aiCityMapPanel .ai-city-bottom-stats {
+    left:18px !important;
+    bottom:50px !important;
+    gap:8px !important;
+    z-index:40 !important;
+}
+
+#aiCityMapPanel .ai-city-bottom-stats .ai-city-stat {
+    width:92px !important;
+    min-width:92px !important;
+    height:58px !important;
+    padding:7px 8px !important;
+    box-sizing:border-box !important;
+}
+
+#aiCityMapPanel .ai-city-compass {
+    right:62px !important;
+    bottom:92px !important;
+    width:64px !important;
+    height:64px !important;
+    z-index:40 !important;
+}
+
+#aiCityMapPanel .ai-city-zoom {
+    right:18px !important;
+    bottom:92px !important;
+    z-index:40 !important;
+}
+
+#aiCityMapPanel .ai-city-bottom {
+    display:none !important;
+}
+
+#aiCityMapPanel .ai-city-stats {
+    display:none !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+}
+
+
+/* AI CITY — PORTRAIT HAMBURGER BUTTON FIX V1 */
+@media (orientation: portrait) and (max-width: 620px) {
+    #aiCityMapPanel #aiCityHamburgerButton {
+        position: fixed !important;
+        left: 12px !important;
+        top: 86px !important;
+        width: 42px !important;
+        height: 42px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-direction: column !important;
+        gap: 5px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        z-index: 2147483647 !important;
+        pointer-events: auto !important;
+        touch-action: manipulation !important;
+        cursor: pointer !important;
+        isolation: isolate !important;
+    }
+
+    #aiCityMapPanel #aiCityHamburgerButton span {
+        pointer-events: none !important;
+    }
+
+    #aiCityMapPanel .ai-city-hamburger-panel.open {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        width: min(300px, 88vw) !important;
+        transform: translateX(0) !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 2147483646 !important;
+    }
+
+    #aiCityMapPanel .ai-city-menu-backdrop.open {
+        position: fixed !important;
+        inset: 0 !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 2147483645 !important;
+    }
+}
+
+
+
+/* AI CITY — PORTRAIT HAMBURGER VISUAL FIX V1 */
+@media (orientation: portrait) and (max-width: 620px) {
+
+    /* HAMBURGER — REMOVE WHITE BOX */
+    #aiCityMapPanel #aiCityHamburgerButton {
+        background: rgba(1,15,29,.94) !important;
+        border: 1px solid rgba(0,190,255,.58) !important;
+        border-radius: 10px !important;
+        box-shadow:
+            0 0 18px rgba(0,120,255,.22),
+            inset 0 0 12px rgba(0,120,255,.10) !important;
+    }
+
+    #aiCityMapPanel #aiCityHamburgerButton span {
+        background: #bdefff !important;
+        box-shadow: 0 0 7px rgba(0,190,255,.45) !important;
+    }
+
+    /* MENU PANEL — OPAQUE FUTURISTIC SURFACE */
+    #aiCityMapPanel .ai-city-hamburger-panel.open {
+        background: linear-gradient(
+            180deg,
+            rgba(1,12,24,.99) 0%,
+            rgba(2,18,34,.99) 55%,
+            rgba(1,10,20,.99) 100%
+        ) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border-right: 1px solid rgba(0,190,255,.45) !important;
+        box-shadow: 12px 0 40px rgba(0,0,0,.65) !important;
+    }
+}
+
+
+
+/* AI CITY — PORTRAIT HAMBURGER FINAL VISUAL V2 */
+@media (orientation: portrait) and (max-width: 620px) {
+
+    /* HAMBURGER BUTTON */
+    #aiCityMapPanel #aiCityHamburgerButton {
+        background: rgba(1,15,29,.94) !important;
+        border: 1px solid rgba(0,190,255,.58) !important;
+        border-radius: 10px !important;
+        box-shadow:
+            0 0 18px rgba(0,120,255,.22),
+            inset 0 0 12px rgba(0,120,255,.10) !important;
+    }
+
+    /* FORCE THREE HORIZONTAL LINES */
+    #aiCityMapPanel #aiCityHamburgerButton span {
+        display: block !important;
+        width: 20px !important;
+        height: 2px !important;
+        min-width: 20px !important;
+        min-height: 2px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 2px !important;
+        background: #bdefff !important;
+        box-shadow: 0 0 7px rgba(0,190,255,.45) !important;
+        pointer-events: none !important;
+    }
+
+    /* SOLID PORTRAIT MENU */
+    #aiCityMapPanel .ai-city-hamburger-panel.open {
+        background: linear-gradient(
+            180deg,
+            rgba(1,12,24,1) 0%,
+            rgba(2,18,34,1) 55%,
+            rgba(1,10,20,1) 100%
+        ) !important;
+        opacity: 1 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border-right: 1px solid rgba(0,190,255,.45) !important;
+        box-shadow: 12px 0 40px rgba(0,0,0,.65) !important;
+    }
+}
+
+
+
+/* AI CITY — PORTRAIT HAMBURGER CLOSED GHOST FIX V1 */
+@media (orientation: portrait) and (max-width: 620px) {
+
+    /* CLOSED PANEL MUST BE COMPLETELY INVISIBLE */
+    #aiCityMapPanel .ai-city-hamburger-panel:not(.open) {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: translateX(-105%) !important;
+    }
+
+    /* CLOSED BACKDROP MUST NOT AFFECT THE MAP */
+    #aiCityMapPanel .ai-city-menu-backdrop:not(.open) {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+}
+
+
+/* AI CITY — PORTRAIT HAMBURGER WIDTH 50% FIX2 */
+@media (orientation: portrait) and (max-width: 620px) {
+    #aiCityMapPanel .ai-city-hamburger-panel.open {
+        width: 150px !important;
+    }
+}
+
+/* AI CITY — PORTRAIT HAMBURGER WIDTH 50% V1 */
+@media (orientation: portrait) and (max-width: 620px) {
+    #aiCityMapPanel .ai-city-hamburger-panel {
+        width: 150px !important;
+    }
+}
+
+/* AI CITY — PORTRAIT HAMBURGER SCROLL FIX V1 */
+@media (orientation: portrait) and (max-width: 620px) {
+    #aiCityMapPanel .ai-city-hamburger-panel.open {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior: contain !important;
+        padding-bottom: 40px !important;
+        box-sizing: border-box !important;
+        touch-action: pan-y !important;
+    }
+
+    #aiCityMapPanel .ai-city-hamburger-menu {
+        min-height: max-content !important;
+        padding-bottom: 20px !important;
+    }
+}
+
+
+
+/* AI CITY MAP V3 — AGENTS ONLINE SUBPANEL */
+.ai-city-agents-subpanel {
+    position: fixed;
+    left: 300px;
+    top: 0;
+    bottom: 0;
+    width: 245px;
+    z-index: 2147483645;
+    box-sizing: border-box;
+    padding: 16px 12px 20px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: linear-gradient(
+        180deg,
+        rgba(2,18,35,.98),
+        rgba(1,11,22,.98)
+    );
+    border-right: 1px solid rgba(0,180,255,.28);
+    border-left: 1px solid rgba(0,180,255,.18);
+    box-shadow: 12px 0 36px rgba(0,0,0,.30);
+    transform: translateX(-110%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+        transform .22s ease,
+        opacity .18s ease,
+        visibility .22s ease;
+}
+
+.ai-city-agents-subpanel.open {
+    transform: translateX(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.ai-city-agents-subpanel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    margin-bottom: 12px;
+}
+
+.ai-city-agents-back {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(0,180,255,.35);
+    border-radius: 7px;
+    background: rgba(0,100,170,.14);
+    color: #d9f4ff;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ai-city-agents-back:active {
+    transform: scale(.96);
+}
+
+.ai-city-agents-title {
+    min-width: 0;
+    color: rgba(120,205,255,.90);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+}
+
+.ai-city-agents-search-wrap {
+    margin-bottom: 12px;
+}
+
+.ai-city-agents-search {
+    width: 100%;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 9px;
+    border: 1px solid rgba(0,154,255,.38);
+    border-radius: 7px;
+    outline: none;
+    background: rgba(2,17,32,.82);
+    color: #d9f4ff;
+    font-size: 9px;
+}
+
+.ai-city-agents-search::placeholder {
+    color: rgba(180,220,245,.45);
+}
+
+.ai-city-agents-search:focus {
+    border-color: rgba(0,180,255,.72);
+    box-shadow: 0 0 10px rgba(0,130,255,.12);
+}
+
+.ai-city-agents-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.ai-city-online-agent {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 43px;
+    box-sizing: border-box;
+    padding: 7px 8px;
+    border: 1px solid rgba(0,154,255,.30);
+    border-radius: 8px;
+    background: rgba(2,17,32,.68);
+}
+
+.ai-city-online-dot {
+    flex: 0 0 auto;
+    color: #55e68a;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.ai-city-online-agent-info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ai-city-online-agent-info strong {
+    overflow: hidden;
+    color: #d9f4ff;
+    font-size: 10px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ai-city-online-agent-info small {
+    color: rgba(180,220,245,.58);
+    font-size: 8px;
+}
+
+.ai-city-agents-empty {
+    padding: 12px 5px;
+    color: rgba(180,220,245,.55);
+    font-size: 9px;
+    text-align: center;
+}
+
+@media (orientation: portrait) and (max-width: 620px) {
+    #aiCityMapPanel .ai-city-agents-subpanel {
+        left: 150px;
+        width: 190px;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+    #aiCityMapPanel .ai-city-agents-subpanel {
+        left: min(300px, 52vw);
+        width: 230px;
+    }
+}
+
+/* AI CITY MAP V3 — CITIZENS MOBILE ALIGN V1 */
+@media (orientation: portrait) and (max-width: 620px) {
+    #aiCityMapPanel .ai-city-citizens-subpanel {
+        left: 150px;
+        width: 190px;
+    }
+}
+
+
+
+
+
+
+/* ============================================================
+   AI CITY — COMING SOON MODAL V1
+   ============================================================ */
+
+.ai-city-coming-soon-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(3, 8, 18, 0.76);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+        opacity 0.22s ease,
+        visibility 0.22s ease;
+}
+
+.ai-city-coming-soon-modal.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.ai-city-coming-soon-card {
+    width: min(430px, 92vw);
+    box-sizing: border-box;
+    padding: 30px 28px 26px;
+    border: 1px solid rgba(120, 210, 255, 0.34);
+    border-radius: 18px;
+    background:
+        linear-gradient(
+            145deg,
+            rgba(10, 24, 42, 0.97),
+            rgba(5, 12, 25, 0.98)
+        );
+    box-shadow:
+        0 0 35px rgba(0, 170, 255, 0.14),
+        0 24px 70px rgba(0, 0, 0, 0.52);
+    text-align: center;
+    transform: translateY(10px) scale(0.97);
+    transition: transform 0.22s ease;
+}
+
+.ai-city-coming-soon-modal.open .ai-city-coming-soon-card {
+    transform: translateY(0) scale(1);
+}
+
+.ai-city-coming-soon-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    color: rgba(215, 242, 255, 0.92);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+}
+
+.ai-city-coming-soon-mark {
+    font-size: 20px;
+}
+
+.ai-city-coming-soon-line {
+    width: 72px;
+    height: 1px;
+    margin: 16px auto 22px;
+    background: rgba(120, 210, 255, 0.42);
+}
+
+.ai-city-coming-soon-label {
+    font-size: 25px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    color: rgba(130, 220, 255, 0.96);
+    text-shadow: 0 0 18px rgba(0, 190, 255, 0.22);
+}
+
+.ai-city-coming-soon-name {
+    margin-top: 14px;
+    color: rgba(240, 249, 255, 0.96);
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.ai-city-coming-soon-text {
+    margin: 12px auto 24px;
+    max-width: 330px;
+    color: rgba(190, 211, 226, 0.78);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.ai-city-coming-soon-close {
+    min-width: 120px;
+    padding: 10px 22px;
+    border: 1px solid rgba(120, 210, 255, 0.42);
+    border-radius: 8px;
+    background: rgba(20, 55, 78, 0.42);
+    color: rgba(225, 247, 255, 0.94);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease,
+        transform 0.18s ease;
+}
+
+.ai-city-coming-soon-close:hover {
+    background: rgba(35, 88, 118, 0.58);
+    border-color: rgba(140, 225, 255, 0.72);
+    transform: translateY(-1px);
+}
+
+@media (max-width: 520px) {
+    .ai-city-coming-soon-card {
+        padding: 26px 20px 22px;
+    }
+
+    .ai-city-coming-soon-label {
+        font-size: 21px;
+        letter-spacing: 3px;
+    }
+
+    .ai-city-coming-soon-name {
+        font-size: 18px;
+    }
+}
+
+
+.ai-city-cityhall-toggle {
+    width: 100%;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+    background: transparent !important;
+    color: inherit !important;
+    border-radius: 9px !important;
+    padding: 0 13px !important;
+    font-weight: normal !important;
+}
+
+.ai-city-cityhall-arrow {
+    margin-left: auto;
+    font-size: 18px;
+    transition: transform .2s ease;
+}
+
+.ai-city-cityhall-toggle.expanded .ai-city-cityhall-arrow {
+    transform: rotate(90deg);
+}
+
+.ai-city-cityhall-submenu {
+    display: none;
+    margin-left: 34px;
+    margin-top: 2px;
+    margin-bottom: 5px;
+    position: relative;
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+}
+
+.ai-city-cityhall-menu {
+    position: relative;
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+}
+
+.ai-city-cityhall-submenu button {
+    position: relative;
+    z-index: 2147483647;
+    pointer-events: auto !important;
+    touch-action: manipulation;
+}
+
+.ai-city-cityhall-submenu.open {
+    display: block;
+}
+
+.ai-city-cityhall-subitem {
+    display: flex !important;
+    align-items: center;
+    min-height: 38px !important;
+    width: calc(100% - 8px) !important;
+    margin: 2px 0 !important;
+    padding: 0 8px !important;
+    border: 0 !important;
+    border-left: 1px solid rgba(0,180,255,.30) !important;
+    background: transparent !important;
+    color: rgba(235,247,255,.82) !important;
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+}
+.ai-city-cityhall-submenu button {
+    display: block;
+    width: calc(100% - 8px);
+    margin: 2px 0;
+    padding: 8px 8px;
+    border: 0;
+    border-left: 1px solid rgba(0,180,255,.30);
+    background: transparent;
+    color: rgba(235,247,255,.82);
+    text-align: left;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ai-city-cityhall-submenu button:hover {
+    background: rgba(0,180,255,.10);
+    color: #fff;
+}
+
+#aiCityCityHallDetailPanel {
+    position: fixed !important;
+    left: 300px !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 300px !important;
+    z-index: 2147483647 !important;
+    box-sizing: border-box;
+    padding: 18px 14px;
+    overflow-y: auto;
+    background: linear-gradient(
+        180deg,
+        rgba(2,18,35,.98),
+        rgba(1,11,22,.98)
+    );
+    border-right: 1px solid rgba(0,180,255,.28);
+    box-shadow: 12px 0 36px rgba(0,0,0,.30);
+    transform: translateX(-110%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+        transform .22s ease,
+        opacity .18s ease,
+        visibility .22s ease;
+}
+
+#aiCityCityHallDetailPanel.open {
+    transform: translateX(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#aiCityCityHallDetailPanel h2 {
+    margin: 0 0 18px;
+    padding-right: 34px;
+    color: #fff;
+    font-size: 18px;
+}
+
+#aiCityCityHallDetailClose {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(0,180,255,.25);
+    border-radius: 6px;
+    background: rgba(0,20,35,.55);
+    color: rgba(235,247,255,.85);
+    font-size: 22px;
+    line-height: 26px;
+    cursor: pointer;
+    z-index: 2147483647;
+}
+
+#aiCityCityHallDetailClose:hover {
+    background: rgba(0,180,255,.12);
+    color: #fff;
+}
+
+#aiCityCityHallDetailPanel .cityhall-test-row {
+    padding: 12px 8px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(0,180,255,.18);
+    border-radius: 6px;
+    color: rgba(235,247,255,.85);
+    font-size: 12px;
+}
+
+.ai-city-citizen-card {
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(0,180,255,.22);
+    border-radius: 8px;
+    background: rgba(0,20,35,.35);
+    color: rgba(235,247,255,.88);
+    font-size: 12px;
+}
+
+.ai-city-citizen-card-name {
+    margin-bottom: 8px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.ai-city-citizen-card-line {
+    margin: 4px 0;
+    color: rgba(235,247,255,.78);
+}
+
+.ai-city-citizen-card-button {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 9px;
+    border: 1px solid rgba(0,180,255,.35);
+    border-radius: 6px;
+    background: rgba(0,180,255,.08);
+    color: #fff;
+    cursor: pointer;
+}
+
+.ai-city-citizen-card-button:hover {
+    background: rgba(0,180,255,.16);
+}
+
+@media (orientation: portrait) and (max-width: 620px) {
+    #aiCityCityHallDetailPanel {
+        left: 150px !important;
+        width: calc(100vw - 150px) !important;
+        z-index: 2147483647 !important;
+    }
+}
+
 </style>
 </head>
 
@@ -2055,9 +3482,14 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
 
             
 
-            <a href="#" onclick="return menuComingSoon(event, 'Registrasi')">
+            <a href="/register">
                 <span>📝</span>
                 <span>Registrasi</span>
+            </a>
+
+            <a href="/login">
+                <span>🔐</span>
+                <span>Login</span>
             </a>
 
             <a href="/static/whitepaper.html">
@@ -2065,12 +3497,12 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
                 <span>Whitepaper</span>
             </a>
 
-            <a href="#" onclick="return menuComingSoon(event, 'Komunitas X')">
+            <a href="https://x.com/aicityai" target="_blank" rel="noopener noreferrer">
                 <span>𝕏</span>
                 <span>Komunitas</span>
             </a>
 
-            <a href="#" onclick="return menuComingSoon(event, 'Peraturan Pengguna')">
+            <a href="/static/ai_city_user_rules_v1.html">
                 <span>📜</span>
                 <span>Peraturan Pengguna</span>
             </a>
@@ -2083,6 +3515,51 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
 
     </aside>
 
+
+
+
+</div>
+
+<!-- ============================================================
+     AI CITY — COMING SOON MODAL V1
+     ============================================================ -->
+<div
+    id="aiCityComingSoonModal"
+    class="ai-city-coming-soon-modal"
+    aria-hidden="true"
+    onclick="if (event.target === this) closeComingSoonModal()">
+
+    <div class="ai-city-coming-soon-card">
+
+        <div class="ai-city-coming-soon-brand">
+            <span class="ai-city-coming-soon-mark">◇</span>
+            <span>AI CITY</span>
+        </div>
+
+        <div class="ai-city-coming-soon-line"></div>
+
+        <div class="ai-city-coming-soon-label">
+            COMING SOON
+        </div>
+
+        <div
+            id="aiCityComingSoonName"
+            class="ai-city-coming-soon-name">
+            Feature
+        </div>
+
+        <p class="ai-city-coming-soon-text">
+            Fitur ini akan tersedia pada tahap berikutnya.
+        </p>
+
+        <button
+            type="button"
+            class="ai-city-coming-soon-close"
+            onclick="closeComingSoonModal()">
+            CLOSE
+        </button>
+
+    </div>
 </div>
 
 <section class="hero-section">
@@ -2188,10 +3665,63 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
 </div>
 
 
+
 <div id="aiCityMapPanel" style="display:none;">
+<div id="aiCityCityHallDetailPanel">
+    <button type="button"
+            id="aiCityCityHallDetailClose"
+            onclick="aiCityCloseCityHallPanel()"
+            aria-label="Close City Hall panel">×</button>
+    <h2 id="aiCityCityHallDetailTitle">Citizen Registry</h2>
+    <div id="aiCityCityHallDetailContent"></div>
+</div>
+
+
 <div class="ai-city-map-v3">
 
     <div class="ai-city-map-v3-bg"></div>
+
+    <!-- AI CITY V3 — DISTRICT LAYER -->
+    <div class="ai-city-map-v3-districts">
+        {% for district in physical.get("districts", []) %}
+        {% if district.get("id") == "district-002" %}
+        <div class="ai-city-map-v3-district district-002"
+             data-district-id="{{ district.get('id') }}"
+             data-district-type="{{ district.get('type') }}"
+             data-district-status="{{ district.get('status') }}">
+            <div class="ai-city-map-v3-district-label">
+                <span class="ai-city-map-v3-district-icon"></span>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- AI CITY V3 — AGENT LOCATION LAYER -->
+    <div class="ai-city-map-v3-agents">
+        {% for location in physical.get("locations", []) %}
+        <div class="ai-city-map-v3-agent agent-{{ location.get('citizen_id', 'unknown') }}"
+             data-agent-id="{{ location.get('citizen_id') }}"
+
+             title="{{ location.get('citizen_name', 'Unknown Agent') }} · {{ location.get('status', 'unknown') }}">
+
+            <div class="ai-city-map-v3-agent-marker">
+                {% if presence_map.get(location.get('citizen_id')) %}
+                    <span class="ai-city-map-v3-presence {{ 'online' if presence_map.get(location.get('citizen_id')).online else 'offline' }}"></span>
+                {% endif %}
+            </div>
+
+            <div class="ai-city-map-v3-agent-label">
+                🤖 {{ location.get('citizen_name', 'Unknown Agent') }}
+            </div>
+
+            <div class="ai-city-map-v3-agent-id">
+                {{ location.get('citizen_id', '') }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
     <div class="ai-city-map-v3-vignette"></div>
 
     <div class="ai-city-map-v3-top">
@@ -2247,36 +3777,377 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
     </div>
 
     
-    <button class="ai-city-back" onclick="closeCityMap()">← City</button>
+    <button class="ai-city-back" onclick="try { sessionStorage.removeItem('aiCityMapState'); } catch (error) { console.warn('AI CITY MAP: state clear gagal', error); } closeCityMap()">← City</button>
 
-    <aside class="ai-city-side">
-        <a class="ai-city-nav-item active" href="#" onclick="return false;">
-            <span class="nav-icon">⌖</span><span>AI CITY Map</span>
-        </a>
-        <a class="ai-city-nav-item" href="#citizens" onclick="closeCityMap();">
-            <span class="nav-icon">♟</span><span>Citizens</span>
-        </a>
-        <a class="ai-city-nav-item" href="#agents" onclick="closeCityMap();">
-            <span class="nav-icon">🤖</span><span>Agents</span>
-        </a>
-        <a class="ai-city-nav-item" href="#city-hall" onclick="closeCityMap();">
-            <span class="nav-icon">🏛</span><span>City Hall</span>
-        </a>
-        <a class="ai-city-nav-item" href="#activity" onclick="closeCityMap();">
-            <span class="nav-icon">↗</span><span>City Activity</span>
-        </a>
-        <a class="ai-city-nav-item" href="#" onclick="return false;">
-            <span class="nav-icon">⚙</span><span>Settings</span>
-        </a>
-    
+    <button
+        type="button"
+        class="ai-city-hamburger"
+        id="aiCityHamburgerButton"
+        onclick="aiCityToggleHamburger()" 
+        aria-label="Open AI CITY menu"
+        aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
 
-        
-    
+    <div
+        class="ai-city-menu-backdrop"
+        id="aiCityMenuBackdrop"
+        onclick="aiCityCloseHamburger()">
+    </div>
 
+    <aside class="ai-city-hamburger-panel" id="aiCityHamburgerPanel">
+
+        <div class="ai-city-hamburger-header">
+            <div>
+                <div class="ai-city-hamburger-title">AI CITY</div>
+                <div class="ai-city-hamburger-subtitle">CITY CONTROL</div>
+            </div>
+
+            <button
+                type="button"
+                class="ai-city-hamburger-close"
+                onclick="aiCityCloseHamburger()"
+                aria-label="Close menu">×</button>
+        </div>
+
+        <div class="ai-city-hamburger-menu">
+
+            <a class="ai-city-nav-item active"
+               href="#"
+               onclick="aiCityCloseHamburger(); return false;">
+                <span class="nav-icon">⌖</span>
+                <span>AI CITY Map</span>
+            </a>
+
+            <a class="ai-city-nav-item"
+               href="#citizens"
+               onclick="aiCityOpenCitizensPanel(); return false;">
+                <span class="nav-icon">♟</span>
+                <span>Citizens</span>
+            </a>
+
+            <a class="ai-city-nav-item"
+               href="#agents"
+               onclick="aiCityOpenAgentsPanel(); return false;">
+                <span class="nav-icon">🤖</span>
+                <span>Agents</span>
+            </a>
+
+            <div class="ai-city-cityhall-menu">
+                <button type="button"
+                        class="ai-city-nav-item ai-city-cityhall-toggle"
+                        onclick="aiCityToggleCityHall()" >
+                    <span class="nav-icon">🏛</span>
+                    <span>City Hall</span>
+                    <span id="aiCityCityHallArrow" class="ai-city-cityhall-arrow">›</span>
+                </button>
+
+                <div id="aiCityCityHallSubmenu" class="ai-city-cityhall-submenu">
+                    <button type="button" class="ai-city-nav-item ai-city-cityhall-subitem"
+                            data-cityhall-panel="registry"
+                        onclick="aiCityOpenCityHallPanel('registry');">
+                        <span>1. Citizen Registry</span>
+                    </button>
+                    <button type="button" class="ai-city-nav-item ai-city-cityhall-subitem"
+                            data-cityhall-panel="identity"
+                        onclick="aiCityOpenCityHallPanel('identity');">
+                        <span>2. Agent Identity</span>
+                    </button>
+                    <button type="button" class="ai-city-nav-item ai-city-cityhall-subitem"
+                            data-cityhall-panel="passport"
+                        onclick="aiCityOpenCityHallPanel('passport');">
+                        <span>3. Agent Passport</span>
+                    </button>
+                    <button type="button" class="ai-city-nav-item ai-city-cityhall-subitem"
+                            data-cityhall-panel="administration"
+                        onclick="aiCityOpenCityHallPanel('administration');">
+                        <span>4. City Administration</span>
+                    </button>
+                </div>
+            </div>
+
+            <a class="ai-city-nav-item"
+               href="#activity"
+               onclick="aiCityCloseHamburger(); closeCityMap();">
+                <span class="nav-icon">↗</span>
+                <span>City Activity</span>
+            </a>
+
+            <div class="ai-city-menu-divider"></div>
+
+            <div class="ai-city-menu-section-label">
+                CITY SYSTEMS
+            </div>
+
+            <a class="ai-city-nav-item"
+   href="#"
+   onclick="aiCityOpenDistrictsPanel(); return false;">
+  <span class="nav-icon">🏙</span>
+  <span>Districts</span>
+</a>
+
+            <a class="ai-city-nav-item ai-city-nav-item-future"
+               href="#"
+               onclick="return false;">
+                <span class="nav-icon">🏢</span>
+                <span>Buildings</span>
+                <small>SOON</small>
+            </a>
+
+            <a class="ai-city-nav-item ai-city-nav-item-future"
+               href="#"
+               onclick="return false;">
+                <span class="nav-icon">🎯</span>
+                <span>Goals</span>
+                <small>SOON</small>
+            </a>
+
+            <a class="ai-city-nav-item ai-city-nav-item-future"
+               href="#"
+               onclick="return false;">
+                <span class="nav-icon">💬</span>
+                <span>Agent Chat</span>
+                <small>SOON</small>
+            </a>
+
+            <a class="ai-city-nav-item ai-city-nav-item-future"
+               href="#"
+               onclick="return false;">
+                <span class="nav-icon">🧠</span>
+                <span>Memory</span>
+                <small>SOON</small>
+            </a>
+
+            <a class="ai-city-nav-item ai-city-nav-item-future"
+               href="#"
+               onclick="return false;">
+                <span class="nav-icon">🔗</span>
+                <span>Relationships</span>
+                <small>SOON</small>
+            </a>
+
+            <div class="ai-city-menu-divider"></div>
+
+            <div class="ai-city-menu-section-label">
+                AGENT CONTROL
+            </div>
+
+            <div class="ai-city-menu-divider"></div>
+
+            <a class="ai-city-nav-item"
+               href="#"
+               onclick="return false;">
+                <span class="nav-icon">⚙</span>
+                <span>Settings</span>
+                        </a>
+
+                        <div class="ai-city-menu-divider"></div>
+
+                        <a class="ai-city-nav-item"
+                           href="/logout">
+                            <span class="nav-icon">🚪</span>
+                            <span>Logout</span>
+                        </a>
+
+        </div>
     </aside>
 
     
-    <div class="ai-city-bottom-stats">
+    <div class="ai-city-agents-subpanel" id="aiCityCitizensSubpanel">
+    <div class="ai-city-agents-subpanel-header">
+        <button type="button"
+                class="ai-city-agents-back"
+                onclick="aiCityCloseCitizensPanel()"
+                aria-label="Close Citizens panel">←</button>
+        <div class="ai-city-agents-title">CITIZENS</div>
+    </div>
+
+    <div class="ai-city-agents-search-wrap">
+        <input type="text"
+               id="aiCityCitizensSearch"
+               class="ai-city-agents-search"
+               placeholder="Search citizen or ID..."
+               oninput="aiCityFilterCitizens()"
+               autocomplete="off">
+    </div>
+
+    <div class="ai-city-agents-list" id="aiCityCitizensList">
+        {% for citizen in citizens %}
+            <div class="ai-city-online-agent"
+                 data-citizen-name="{{ citizen.get('name', '')|lower }}"
+                 data-citizen-id="{{ citizen.get('id', '')|lower }}">
+                <span class="ai-city-online-dot {{ 'online' if presence_map.get(citizen.get('id'), {}).get('online') else '' }}">●</span>
+                <div class="ai-city-online-agent-info">
+                    <strong>{{ citizen.get('name') }}</strong>
+                    <small>{{ citizen.get('id')|replace("agent-", "Agent-") }}</small>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="ai-city-agents-empty" id="aiCityCitizensEmpty" style="display:none;">
+        No citizen found.
+    </div>
+</div>
+
+<div class="ai-city-agents-subpanel" id="aiCityDistrictDetailPanel">
+    <div class="ai-city-agents-subpanel-header">
+        <button type="button"
+                class="ai-city-agents-back"
+                onclick="aiCityCloseDistrictDetail()"
+                aria-label="Close District Detail">←</button>
+        <div class="ai-city-agents-title" id="aiCityDistrictDetailTitle">
+            DISTRICT DETAIL
+        </div>
+    </div>
+
+    <div class="ai-city-agents-list" id="aiCityDistrictDetailContent"></div>
+</div>
+
+<div class="ai-city-agents-subpanel" id="aiCityFunctionDetailPanel">
+    <div class="ai-city-agents-subpanel-header">
+        <button type="button"
+                class="ai-city-agents-back"
+                onclick="aiCityCloseFunctionDetail()"
+                aria-label="Close Function Detail">←</button>
+        <div class="ai-city-agents-title" id="aiCityFunctionDetailTitle">
+            FUNCTION DETAIL
+        </div>
+    </div>
+    <div class="ai-city-agents-list" id="aiCityFunctionDetailContent"></div>
+
+    <div style="padding:12px;">
+        <button type="button"
+                class="ai-city-nav-item ai-city-execute-function-button"
+                onclick="aiCityExecuteBuildingFunction()"
+                style="width:100%; justify-content:center; background:rgba(0,105,165,.25) !important; color:#dff7ff !important; border:1px solid rgba(0,175,240,.24) !important;">
+            ▶ EXECUTE FUNCTION
+        </button>
+        <div id="aiCityFunctionExecutionResult"
+             style="margin-top:10px;"></div>
+    </div>
+</div>
+
+<div class="ai-city-agents-subpanel" id="aiCityBuildingDetailPanel">
+    <div class="ai-city-agents-subpanel-header">
+        <button type="button"
+                class="ai-city-agents-back"
+                onclick="aiCityCloseBuildingDetail()"
+                aria-label="Close Building Detail">←</button>
+        <div class="ai-city-agents-title" id="aiCityBuildingDetailTitle">
+            BUILDING DETAIL
+        </div>
+    </div>
+    <div class="ai-city-agents-list" id="aiCityBuildingDetailContent"></div>
+</div>
+
+<div class="ai-city-agents-subpanel" id="aiCityAgentsSubpanel">
+    <div class="ai-city-agents-subpanel-header">
+        <button type="button"
+                class="ai-city-agents-back"
+                onclick="aiCityCloseAgentsPanel()"
+                aria-label="Close Agents panel">←</button>
+        <div class="ai-city-agents-title">AGENTS ONLINE</div>
+    </div>
+
+    <div class="ai-city-agents-search-wrap">
+        <input type="text"
+               id="aiCityAgentsSearch"
+               class="ai-city-agents-search"
+               placeholder="Search agent or ID..."
+               oninput="aiCityFilterAgents()"
+               autocomplete="off">
+    </div>
+
+    <div class="ai-city-agents-list" id="aiCityAgentsList">
+        {% for citizen in citizens %}
+            {% if presence_map.get(citizen.get("id"), {}).get("online") %}
+                <div class="ai-city-online-agent"
+                     data-agent-name="{{ citizen.get('name', '')|lower }}"
+                     data-agent-id="{{ citizen.get('id', '')|lower }}">
+                    <span class="ai-city-online-dot">●</span>
+                    <div class="ai-city-online-agent-info">
+                        <strong>{{ citizen.get('name') }}</strong>
+                        <small>{{ citizen.get('id')|replace("agent-", "Agent-") }}</small>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="ai-city-agents-empty" id="aiCityAgentsEmpty" style="display:none;">
+        No online agent found.
+    </div>
+</div>
+
+<div class="ai-city-agents-subpanel" id="aiCityDistrictsSubpanel">
+    <div class="ai-city-agents-subpanel-header">
+        <button type="button"
+                class="ai-city-agents-back"
+                onclick="aiCityCloseDistrictsPanel()"
+                aria-label="Close Districts panel">←</button>
+        <div class="ai-city-agents-title">DISTRICTS</div>
+    </div>
+
+    <div class="ai-city-agents-list" id="aiCityDistrictsList">
+        {% for district in physical.get("districts", []) %}
+        <div class="ai-city-online-agent"
+             data-district-id="{{ district.get("id", "") }}"
+             onclick="aiCityOpenDistrictDetail(this.dataset.districtId)"
+             style="cursor:pointer;">
+            <span class="ai-city-online-dot">●</span>
+            <div class="ai-city-online-agent-info">
+                <strong>{{ district.get("name", "Unnamed District") }}</strong>
+                <small>
+                    {{ district.get("type", "unknown")|upper }}
+                    · {{ district.get("status", "unknown")|upper }}
+                    · {{ district.get("buildings", [])|length }} building
+                </small>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="ai-city-agents-empty"
+         id="aiCityDistrictsEmpty"
+         style="display:none;">
+        No district found.
+    </div>
+</div>
+
+<div class="ai-city-movement">
+    <div class="ai-city-movement-title">
+        AGENT MOVEMENT
+    </div>
+
+    <div class="ai-city-movement-row">
+        <select id="aiCityMoveAgent">
+            {% for citizen in citizens %}
+                {% if citizen.get("owner") == current_username %}
+                    <option value="{{ citizen.get('id') }}">
+                        {{ citizen.get('name') }}
+                    </option>
+                {% endif %}
+            {% endfor %}
+        </select>
+
+        <select id="aiCityMoveDestination">
+            <option value="city-hall">City Hall</option>
+            <option value="city-center">City Center</option>
+                        <option value="residential-district">Residential District</option>
+        </select>
+
+        <button
+            type="button"
+            onclick="aiCityMoveSelectedAgent()">
+            MOVE
+        </button>
+    </div>
+</div>
+
+<div class="ai-city-bottom-stats">
         <div class="ai-city-stat">
                 <span class="ai-city-stat-icon">♟</span>
                 <span>Citizens</span>
@@ -2334,13 +4205,19 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
 <div class="ai-city-map-road horizontal"></div>
 <div class="ai-city-map-road vertical"></div>
 
-<div class="ai-city-map-node city-hall">
+<div class="ai-city-map-node city-hall"
+     data-node-id="city-hall"
+     onclick="aiCityStartAgentMovement('agent-001', 'city-hall')"
+     title="Send Dudu to City Hall">
 🏛️
 <strong>City Hall</strong>
 <small>{{ district.name }}</small>
 </div>
 
-<div class="ai-city-map-node center">
+<div class="ai-city-map-node center"
+     data-node-id="city-center"
+     onclick="aiCityStartAgentMovement('agent-001', 'city-center')"
+     title="Send Dudu to City Center">
 🌐
 <strong>City Center</strong>
 <small>{{ district.status|upper }}</small>
@@ -2350,19 +4227,20 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
 
 {% if location.district_id == district.id %}
 
-{% if location.citizen_name == "Dudu" %}
+<div class="ai-city-map-citizen {{ 'dudu' if location.citizen_id == 'agent-001' else 'bubu' if location.citizen_id == 'agent-002' else '' }}"
+     data-agent-id="{{ location.citizen_id }}">
 
-<div class="ai-city-map-citizen dudu">
-🤖 Dudu · {{ location.status }}
+    🤖 {{ location.citizen_name }} · {{ location.status }}
+
+    {% if presence_map.get(location.citizen_id) %}
+    <span
+        class="ai-city-agent-presence {{ 'online' if presence_map.get(location.citizen_id).online else 'offline' }}"
+        title="{{ presence_map.get(location.citizen_id).status }}"
+        aria-label="{{ presence_map.get(location.citizen_id).status }}">
+    </span>
+    {% endif %}
+
 </div>
-
-{% elif location.citizen_name == "Bubu" %}
-
-<div class="ai-city-map-citizen bubu">
-🤖 Bubu · {{ location.status }}
-</div>
-
-{% endif %}
 
 {% endif %}
 
@@ -2535,6 +4413,23 @@ body.map-only .city > #aiCityMapPanel { display: block !important; }
         {{ messages|length }} messages
     </span>
 </summary>
+
+<form method="POST" class="city-chat-send-form">
+    <select name="sender" required>
+        <option value="">Sender</option>
+        {% for citizen in citizens %}
+        <option value="{{ citizen.get("id") }}">{{ citizen.get("name") }} ({{ citizen.get("id") }})</option>
+        {% endfor %}
+    </select>
+    <select name="receiver" required>
+        <option value="">Receiver</option>
+        {% for citizen in citizens %}
+        <option value="{{ citizen.get("id") }}">{{ citizen.get("name") }} ({{ citizen.get("id") }})</option>
+        {% endfor %}
+    </select>
+    <input type="text" name="message" placeholder="Tulis pesan antar-agent..." required>
+    <button type="submit">SEND</button>
+</form>
 
 <div class="city-hub-history">
 
@@ -2746,8 +4641,63 @@ function closeCityMenu(event) {
     }
 }
 
+
+/* ============================================================
+   AI CITY HAMBURGER CONTROL
+   ============================================================ */
+
+function aiCityToggleHamburger() {
+    const panel = document.getElementById("aiCityHamburgerPanel");
+    const backdrop = document.getElementById("aiCityMenuBackdrop");
+    const button = document.getElementById("aiCityHamburgerButton");
+
+    if (!panel || !backdrop) return;
+
+    const isOpen = panel.classList.contains("open");
+
+    if (isOpen) {
+        aiCityCloseHamburger();
+        return;
+    }
+
+    panel.classList.add("open");
+    backdrop.classList.add("open");
+
+    if (button) {
+        button.setAttribute("aria-expanded", "true");
+        button.style.visibility = "hidden";
+    }
+}
+
+function aiCityCloseHamburger() {
+    const panel = document.getElementById("aiCityHamburgerPanel");
+    const backdrop = document.getElementById("aiCityMenuBackdrop");
+    const button = document.getElementById("aiCityHamburgerButton");
+
+    if (panel) panel.classList.remove("open");
+    if (backdrop) backdrop.classList.remove("open");
+
+    if (button) {
+        button.setAttribute("aria-expanded", "false");
+        button.style.visibility = "visible";
+    }
+}
+
+document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+        aiCityCloseHamburger();
+    }
+});
+
+
 function openCityMap(event) {
     event.preventDefault();
+
+    try {
+        sessionStorage.setItem("aiCityMapState", "open");
+    } catch (error) {
+        console.warn("AI CITY MAP: state storage gagal", error);
+    }
 
     const panel = document.getElementById("aiCityMapPanel");
 
@@ -2761,22 +4711,869 @@ function openCityMap(event) {
 
     closeCityMenu();
 
+    aiCityUpdateAgentPositions();
+
+    /*
+     * HOMEPAGE -> REFRESH -> MAP V3
+     * Restore posisi terakhir Movement V2 setelah posisi backend
+     * diperbarui, agar agent tidak kembali ke posisi default/City Hall.
+     */
+    try {
+        const savedMovementPositionState =
+            sessionStorage.getItem(
+                "aiCityLastMovementPositionState"
+            );
+
+        if (
+            savedMovementPositionState &&
+            typeof aiCityV2FinalPositions !== "undefined"
+        ) {
+            const movementPositionState =
+                JSON.parse(savedMovementPositionState);
+
+            Object.keys(movementPositionState).forEach(function(agentId) {
+                const savedPosition =
+                    movementPositionState[agentId];
+
+                if (
+                    savedPosition &&
+                    savedPosition.position
+                ) {
+                    aiCityV2FinalPositions.set(
+                        agentId,
+                        {
+                            citizen_id: agentId,
+                            position: savedPosition.position
+                        }
+                    );
+                }
+            });
+        }
+    } catch (error) {
+        console.warn(
+            "AI CITY MAP: homepage position restore gagal",
+            error
+        );
+    }
+
+    if (
+        typeof aiCityV2FinalPositions !== "undefined" &&
+        aiCityV2FinalPositions.size > 0
+    ) {
+        aiCityApplyAgentVisualPositions(
+            Array.from(aiCityV2FinalPositions.values())
+        );
+    }
+
+    aiCityStartMovementLoop();
+
     return false;
 }
 
 
-function aiCityMapZoom(direction) {
-    const bg = document.querySelector(".ai-city-map-v3-bg");
-    if (!bg) return;
+function aiCityApplyAgentVisualPositions(locations) {
+    const groups = {};
 
-    const current = parseFloat(bg.dataset.zoom || "1.035");
-    const next = Math.max(1.035, Math.min(1.22, current + direction * 0.035));
-    bg.dataset.zoom = String(next);
-    bg.style.transform = `scale(${next})`;
+    locations.forEach(function(location) {
+        const position = location.position;
+        if (!position) return;
+        if (typeof position.x !== "number" || typeof position.y !== "number") return;
+
+        const key = position.x + ":" + position.y;
+
+        if (!groups[key]) {
+            groups[key] = [];
+        }
+
+        groups[key].push(location);
+    });
+
+    locations.forEach(function(location) {
+        const agentId = location.citizen_id;
+        const position = location.position;
+
+        if (!agentId || !position) return;
+        if (typeof position.x !== "number" || typeof position.y !== "number") return;
+
+        const marker = document.querySelector(
+            '.ai-city-map-v3-agent[data-agent-id="' + agentId + '"]'
+        );
+
+        if (!marker) return;
+
+        const key = position.x + ":" + position.y;
+        const group = groups[key] || [];
+
+        const index = group.findIndex(function(item) {
+            return item.citizen_id === agentId;
+        });
+
+        /*
+         * AI CITY MAP V3 coordinate transform
+         *
+         * position.x / position.y menggunakan koordinat
+         * relatif terhadap gambar Map V3 (1107 x 1094).
+         *
+         * Karena background memakai background-size: contain,
+         * gambar tidak selalu memenuhi seluruh container.
+         * Konversi ini mengembalikan koordinat gambar menjadi
+         * koordinat container yang benar.
+         */
+        let visualX = position.x;
+        let visualY = position.y;
+
+        const mapContainer = marker.closest(".ai-city-map-v3");
+
+        if (mapContainer) {
+            const rect = mapContainer.getBoundingClientRect();
+
+            const imageWidth = 1107;
+            const imageHeight = 1094;
+
+            const scale = Math.min(
+                rect.width / imageWidth,
+                rect.height / imageHeight
+            );
+
+            const renderedWidth = imageWidth * scale;
+            const renderedHeight = imageHeight * scale;
+
+            const offsetX = (rect.width - renderedWidth) / 2;
+            const offsetY = (rect.height - renderedHeight) / 2;
+
+            const pixelX = offsetX + (position.x / 100) * renderedWidth;
+            const pixelY = offsetY + (position.y / 100) * renderedHeight;
+
+            visualX = (pixelX / rect.width) * 100;
+            visualY = (pixelY / rect.height) * 100;
+        }
+
+        if (group.length > 1) {
+            const offsets = [
+                { x: -2.2, y: -1.8 },
+                { x:  2.2, y:  1.8 },
+                { x: -2.2, y:  1.8 },
+                { x:  2.2, y: -1.8 }
+            ];
+
+            const offset = offsets[index % offsets.length];
+
+            visualX += offset.x;
+            visualY += offset.y;
+        }
+
+        marker.style.left = visualX + "%";
+        marker.style.top = visualY + "%";
+    });
 }
 
-function closeCityMap() {
+async function aiCityUpdateAgentPositions() {
+    try {
+        const response = await fetch("/api/city", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const locations = data.physical && Array.isArray(data.physical.locations)
+            ? data.physical.locations
+            : [];
+
+        aiCityApplyAgentVisualPositions(locations);
+
+    } catch (error) {
+        console.warn("AI CITY movement position update failed:", error);
+    }
+}
+
+let aiCityMovementTimer = null;
+let aiCityMovementBusy = false;
+let aiCityMovementZoomed = false;
+
+/* AI CITY MOVEMENT V2 runtime agents */
+const aiCityV2ActiveAgents = new Set();
+const aiCityV2FinalPositions = new Map();
+
+function aiCityMovementSetZoom(target) {
+    const bg = document.querySelector(".ai-city-map-v3-bg");
+    const agents = document.querySelector(".ai-city-map-v3-agents");
+
+    if (!bg) return;
+
+    bg.style.transition = "transform 0.8s ease";
+    bg.dataset.zoom = String(target);
+    bg.style.transform = `scale(${target})`;
+
+    if (agents) {
+        agents.style.transition = "transform 0.8s ease";
+        agents.style.transform = `scale(${target})`;
+    }
+}
+
+window.aiCityStartAgentMovement = async function(agentId, toNode) {
+    try {
+        /*
+         * AI CITY MOVEMENT V2
+         * V2 digunakan untuk destination yang sudah memiliki
+         * road mapping. City Hall tetap menggunakan V1.
+         */
+        const v2Destinations = [
+            "city-center",
+            "residential-district"
+        ];
+
+        if (v2Destinations.includes(toNode)) {
+            const response = await fetch(
+                "/api/movement/v2/start/" + encodeURIComponent(agentId),
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        destination_id: toNode
+                    })
+                }
+            );
+
+            const result = await response.json();
+
+            console.log("AI CITY movement V2 start:", result);
+
+            if (!response.ok || !result.success) {
+                console.warn("AI CITY movement V2 start failed:", result);
+                return;
+            }
+
+            aiCityV2ActiveAgents.add(agentId);
+            aiCityV2FinalPositions.delete(agentId);
+
+            /*
+             * Terapkan posisi awal dari runtime V2.
+             * Tidak membaca/menulis city_locations.json.
+             */
+            aiCityApplyAgentVisualPositions([
+                {
+                    citizen_id: agentId,
+                    position: result.position
+                }
+            ]);
+
+            aiCityStartMovementLoop();
+            return;
+        }
+
+        /*
+         * FALLBACK V1
+         * Dipertahankan agar City Hall dan movement lama
+         * tetap bekerja seperti sebelumnya.
+         */
+        const response = await fetch(
+            "/api/movement/start/" + encodeURIComponent(agentId),
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    to_node: toNode
+                })
+            }
+        );
+
+        const result = await response.json();
+
+        console.log("AI CITY movement V1 start:", result);
+
+        if (!response.ok || !result.success) {
+            console.warn("AI CITY movement V1 start failed:", result);
+            return;
+        }
+
+        await aiCityUpdateAgentPositions();
+        aiCityStartMovementLoop();
+
+    } catch (error) {
+        console.warn("AI CITY movement start error:", error);
+    }
+}
+
+async function aiCityMovementTick() {
+    if (aiCityMovementBusy) return;
+
     const panel = document.getElementById("aiCityMapPanel");
+    if (!panel || panel.style.display === "none") {
+        console.log("AI CITY MOVEMENT STOP: panel tidak aktif");
+        return;
+    }
+
+    console.log("AI CITY MOVEMENT TICK ACTIVE");
+
+    aiCityMovementBusy = true;
+
+    try {
+        /*
+         * ============================
+         * MOVEMENT V2 RUNTIME
+         * ============================
+         */
+        const aiCityV2VisualLocations = [];
+
+        for (const agentId of Array.from(aiCityV2ActiveAgents)) {
+            const tickResponse = await fetch(
+                "/api/movement/v2/tick/" + encodeURIComponent(agentId),
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            if (!tickResponse.ok) continue;
+
+            const result = await tickResponse.json();
+
+            if (!result.success || !result.position) continue;
+
+            /*
+             * ============================
+             * RESIDENTIAL ARRIVAL -> PERSONAL SPACE
+             * ============================
+             */
+            if (
+                result.completed === true &&
+                result.residential_arrival &&
+                result.residential_arrival.arrival_processed === true
+            ) {
+                aiCityOpenPersonalSpace(
+                    agentId,
+                    result.residential_arrival
+                );
+            }
+
+            aiCityV2FinalPositions.set(agentId, {
+                citizen_id: agentId,
+                position: result.position
+            });
+
+            if (
+                result.completed === true &&
+                result.residential_arrival &&
+                result.residential_arrival.arrival_processed === true
+            ) {
+                try {
+                    const savedPersonalState =
+                        sessionStorage.getItem("aiCityPersonalSpaceState");
+
+                    if (savedPersonalState) {
+                        const personalState =
+                            JSON.parse(savedPersonalState);
+
+                        personalState.lastPosition = result.position;
+
+                        sessionStorage.setItem(
+                            "aiCityPersonalSpaceState",
+                            JSON.stringify(personalState)
+                        );
+                    }
+                } catch (error) {
+                    console.warn(
+                        "AI CITY PERSONAL SPACE: lastPosition save gagal",
+                        error
+                    );
+                }
+            }
+
+            aiCityV2VisualLocations.push({
+                citizen_id: agentId,
+                position: result.position
+            });
+
+            if (result.moving === false || result.completed === true) {
+                aiCityV2ActiveAgents.delete(agentId);
+            }
+        }
+
+        /*
+         * ============================
+         * MOVEMENT V1
+         * ============================
+         * Tetap berjalan seperti sebelumnya.
+         */
+        const response = await fetch("/api/city", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const locations = data.physical && Array.isArray(data.physical.locations)
+            ? data.physical.locations
+            : [];
+
+        const movingAgents = locations.filter(function(location) {
+            return location.movement && location.movement.moving === true;
+        });
+
+        /*
+         * V2 juga ikut menjaga zoom movement.
+         */
+        const anyV2Moving = aiCityV2ActiveAgents.size > 0;
+
+        if ((movingAgents.length > 0 || anyV2Moving) && !aiCityMovementZoomed) {
+            aiCityMovementSetZoom(1.15);
+            aiCityMovementZoomed = true;
+        }
+
+        /*
+         * Tick V1 hanya untuk agent yang benar-benar
+         * dilaporkan moving oleh /api/city.
+         */
+        for (const location of movingAgents) {
+            const agentId = location.citizen_id;
+
+            if (!agentId) continue;
+
+            /*
+             * Jangan double-tick agent yang sedang memakai V2.
+             */
+            if (aiCityV2ActiveAgents.has(agentId)) continue;
+
+            const tickResponse = await fetch(
+                "/api/movement/tick/" + encodeURIComponent(agentId),
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            if (!tickResponse.ok) continue;
+
+            await tickResponse.json();
+        }
+
+        /*
+         * Refresh posisi V1 dari city state.
+         * V2 marker sudah diperbarui langsung dari runtime.
+         */
+        const stateResponse = await fetch("/api/city", { cache: "no-store" });
+        if (!stateResponse.ok) return;
+
+        const stateData = await stateResponse.json();
+        const currentLocations =
+            stateData.physical && Array.isArray(stateData.physical.locations)
+                ? stateData.physical.locations
+                : [];
+
+        aiCityApplyAgentVisualPositions(currentLocations);
+
+        /*
+         * V2 harus diterapkan TERAKHIR agar posisi runtime
+         * tidak ditimpa oleh city_locations.json.
+         */
+        if (aiCityV2VisualLocations.length > 0) {
+            aiCityApplyAgentVisualPositions(aiCityV2VisualLocations);
+        }
+
+        /*
+         * Posisi terakhir V2 harus tetap menjadi posisi visual agent
+         * setelah movement selesai.
+         *
+         * city_locations.json tetap tidak diubah.
+         */
+        if (aiCityV2FinalPositions.size > 0) {
+            aiCityApplyAgentVisualPositions(
+                Array.from(aiCityV2FinalPositions.values())
+            );
+        }
+
+        const stillMovingV1 = currentLocations.some(function(location) {
+            return location.movement && location.movement.moving === true;
+        });
+
+        const stillMovingV2 = aiCityV2ActiveAgents.size > 0;
+
+        if (!stillMovingV1 && !stillMovingV2 && aiCityMovementZoomed) {
+            setTimeout(function() {
+                aiCityMovementSetZoom(1.035);
+                aiCityMovementZoomed = false;
+            }, 900);
+        }
+
+    } catch (error) {
+        console.warn("AI CITY movement loop failed:", error);
+    } finally {
+        aiCityMovementBusy = false;
+    }
+}
+
+function aiCityStartMovementLoop() {
+    if (aiCityMovementTimer) return;
+
+    async function runMovementTick() {
+        if (!aiCityMovementTimer) return;
+
+        await aiCityMovementTick();
+
+        if (!aiCityMovementTimer) return;
+
+        /*
+         * Movement V2:
+         * normal movement = 500 ms
+         * 5 tick terakhir = 1000 ms
+         *
+         * Kita membaca path_index/path_length dari
+         * runtime V2 yang disimpan frontend.
+         */
+        let delay = 500;
+
+        let slowFinalTicks = false;
+
+        if (typeof aiCityV2ActiveAgents !== "undefined") {
+            for (const agentId of aiCityV2ActiveAgents) {
+                const statusResponse = await fetch(
+                    "/api/movement/v2/status/" +
+                    encodeURIComponent(agentId),
+                    {
+                        method: "GET",
+                        cache: "no-store"
+                    }
+                );
+
+                if (!statusResponse.ok) continue;
+
+                const status = await statusResponse.json();
+
+                if (
+                    status.success &&
+                    status.moving === true &&
+                    typeof status.path_index === "number" &&
+                    typeof status.path_length === "number"
+                ) {
+                    const remaining =
+                        status.path_length - status.path_index;
+
+                    if (remaining <= 5) {
+                        slowFinalTicks = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (slowFinalTicks) {
+            delay = 1000;
+        }
+
+        aiCityMovementTimer = setTimeout(
+            runMovementTick,
+            delay
+        );
+    }
+
+    aiCityMovementTimer = setTimeout(
+        runMovementTick,
+        0
+    );
+}
+
+function aiCityStopMovementLoop() {
+    if (aiCityMovementTimer) {
+        clearTimeout(aiCityMovementTimer);
+        aiCityMovementTimer = null;
+    }
+
+    aiCityMovementBusy = false;
+}
+
+
+function aiCityMoveSelectedAgent() {
+    const agentSelect = document.getElementById("aiCityMoveAgent");
+    const destinationSelect = document.getElementById("aiCityMoveDestination");
+
+    if (!agentSelect || !destinationSelect) return;
+
+    const agentId = agentSelect.value;
+    const toNode = destinationSelect.value;
+
+    if (!agentId || !toNode) return;
+
+    aiCityStartAgentMovement(agentId, toNode);
+}
+
+function aiCityMapZoom(direction) {
+    const bg = document.querySelector(".ai-city-map-v3-bg");
+    const map = document.querySelector(".ai-city-map-v3");
+
+    if (!bg || !map) return;
+
+    const current = parseFloat(bg.dataset.zoom || "1.035");
+    const next = Math.max(1.035, Math.min(5, current + direction * 0.035));
+
+    bg.dataset.zoom = String(next);
+
+    /*
+     * AI CITY MAP V3 — PAN CLAMP AFTER ZOOM
+     *
+     * Saat zoom diperkecil, posisi pan lama dari zoom
+     * tinggi tidak boleh tetap berada di luar batas baru.
+     * Hitung ulang batas X/Y berdasarkan ukuran map aktual.
+     */
+
+    const imageWidth = 1107;
+    const imageHeight = 1094;
+
+    const mapWidth = map.clientWidth;
+    const mapHeight = map.clientHeight;
+
+    const containScale = Math.min(
+        mapWidth / imageWidth,
+        mapHeight / imageHeight
+    );
+
+    const renderedWidth = imageWidth * containScale;
+    const renderedHeight = imageHeight * containScale;
+
+    const scaledWidth = renderedWidth * next;
+    const scaledHeight = renderedHeight * next;
+
+    const maxPanX = Math.abs(
+        scaledWidth - mapWidth
+    ) / 2;
+
+    const maxPanY = Math.abs(
+        scaledHeight - mapHeight
+    ) / 2;
+
+    /*
+     * Jika zoom mengecil, pan lama langsung dikembalikan
+     * ke area yang masih valid.
+     */
+    aiCityMapPanX = Math.max(
+        -maxPanX,
+        Math.min(maxPanX, aiCityMapPanX)
+    );
+
+    aiCityMapPanY = Math.max(
+        -maxPanY,
+        Math.min(maxPanY, aiCityMapPanY)
+    );
+
+    /*
+     * Pada zoom rendah, map tetap boleh bergeser
+     * selama seluruh map masih berada di dalam viewport.
+     *
+     * Tidak ada pemaksaan kembali ke tengah hanya
+     * karena ukuran map lebih kecil dari viewport.
+     */
+    aiCityApplyMapTransform();
+}
+
+/*
+ * AI CITY MAP V3 — PAN / DRAG
+ *
+ * Map dan agent layer digeser bersama.
+ * Zoom tetap dikendalikan oleh aiCityMapZoom().
+ * Tidak mengubah koordinat agent atau city state.
+ */
+let aiCityMapPanX = 0;
+let aiCityMapPanY = 0;
+let aiCityMapPanActive = false;
+let aiCityMapPanStartX = 0;
+let aiCityMapPanStartY = 0;
+let aiCityMapPanOriginX = 0;
+let aiCityMapPanOriginY = 0;
+
+function aiCityApplyMapTransform() {
+    const bg = document.querySelector(".ai-city-map-v3-bg");
+    const agents = document.querySelector(".ai-city-map-v3-agents");
+    const districts = document.querySelector(".ai-city-map-v3-districts");
+
+    if (!bg) return;
+
+    const zoom = parseFloat(bg.dataset.zoom || "1.035");
+
+    const transform = `translate(${aiCityMapPanX}px, ${aiCityMapPanY}px) scale(${zoom})`;
+
+    bg.style.transform = transform;
+
+    if (agents) {
+        agents.style.transform = transform;
+    }
+
+    if (districts) {
+        districts.style.transform = transform;
+    }
+}
+
+function aiCityMapPanStart(event) {
+    const panel = document.getElementById("aiCityMapPanel");
+    if (!panel || panel.style.display === "none") return;
+
+    const target = event.target;
+
+    /*
+     * Jangan mengambil gesture dari tombol, select,
+     * hamburger, atau kontrol UI lainnya.
+     */
+    if (
+        target.closest("button") ||
+        target.closest("select") ||
+        target.closest("input") ||
+        target.closest("a")
+    ) {
+        return;
+    }
+
+    aiCityMapPanActive = true;
+
+    aiCityMapPanStartX = event.clientX;
+    aiCityMapPanStartY = event.clientY;
+
+    aiCityMapPanOriginX = aiCityMapPanX;
+    aiCityMapPanOriginY = aiCityMapPanY;
+
+    const map = target.closest(".ai-city-map-v3");
+
+    if (map) {
+        map.style.cursor = "grabbing";
+    }
+
+    if (event.pointerId !== undefined && target.setPointerCapture) {
+        try {
+            target.setPointerCapture(event.pointerId);
+        } catch (error) {
+            /* Pointer capture tidak wajib */
+        }
+    }
+
+    event.preventDefault();
+}
+
+function aiCityMapPanMove(event) {
+    if (!aiCityMapPanActive) return;
+
+    const dx = event.clientX - aiCityMapPanStartX;
+    const dy = event.clientY - aiCityMapPanStartY;
+
+    const map = document.querySelector(".ai-city-map-v3");
+    const bg = document.querySelector(".ai-city-map-v3-bg");
+
+    if (!map || !bg) return;
+
+    const zoom = parseFloat(bg.dataset.zoom || "1.035");
+
+    /*
+     * AI CITY MAP V3 — DYNAMIC PAN BOUNDARY
+     *
+     * Background menggunakan background-size: contain.
+     * Hitung ukuran gambar berdasarkan rasio asli Map V3,
+     * lalu tentukan batas pan setelah zoom.
+     *
+     * Jika hasil zoom lebih kecil dari viewport,
+     * map tetap dipusatkan pada sumbu tersebut.
+     */
+
+    const imageWidth = 1107;
+    const imageHeight = 1094;
+
+    const mapWidth = map.clientWidth;
+    const mapHeight = map.clientHeight;
+
+    const containScale = Math.min(
+        mapWidth / imageWidth,
+        mapHeight / imageHeight
+    );
+
+    const renderedWidth = imageWidth * containScale;
+    const renderedHeight = imageHeight * containScale;
+
+    const scaledWidth = renderedWidth * zoom;
+    const scaledHeight = renderedHeight * zoom;
+
+    /*
+     * Setengah selisih ukuran map dengan viewport
+     * menjadi batas translasi maksimum.
+     */
+    const maxPanX = Math.abs(
+        scaledWidth - mapWidth
+    ) / 2;
+
+    const maxPanY = Math.abs(
+        scaledHeight - mapHeight
+    ) / 2;
+
+    const requestedX = aiCityMapPanOriginX + dx;
+    const requestedY = aiCityMapPanOriginY + dy;
+
+    aiCityMapPanX = Math.max(
+        -maxPanX,
+        Math.min(maxPanX, requestedX)
+    );
+
+    aiCityMapPanY = Math.max(
+        -maxPanY,
+        Math.min(maxPanY, requestedY)
+    );
+
+    aiCityApplyMapTransform();
+
+    event.preventDefault();
+}
+function aiCityMapPanEnd(event) {
+    if (!aiCityMapPanActive) return;
+
+    aiCityMapPanActive = false;
+
+    const map = event.target.closest(".ai-city-map-v3");
+
+    if (map) {
+        map.style.cursor = "grab";
+    }
+
+    if (
+        event.pointerId !== undefined &&
+        event.target.releasePointerCapture
+    ) {
+        try {
+            event.target.releasePointerCapture(event.pointerId);
+        } catch (error) {
+            /* Pointer capture tidak wajib */
+        }
+    }
+
+    event.preventDefault();
+}
+
+function aiCityInitMapPan() {
+    const map = document.querySelector(".ai-city-map-v3");
+
+    if (!map || map.dataset.panReady === "true") return;
+
+    map.dataset.panReady = "true";
+
+    map.style.cursor = "grab";
+    map.style.touchAction = "none";
+
+    map.addEventListener("pointerdown", aiCityMapPanStart);
+    map.addEventListener("pointermove", aiCityMapPanMove);
+    map.addEventListener("pointerup", aiCityMapPanEnd);
+    map.addEventListener("pointercancel", aiCityMapPanEnd);
+    map.addEventListener("pointerleave", function(event) {
+        if (aiCityMapPanActive && event.pointerType === "mouse") {
+            aiCityMapPanEnd(event);
+        }
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    aiCityInitMapPan();
+});
+
+function closeCityMap() {
+    aiCityCloseHamburger();
+    aiCityStopMovementLoop();
+
+    const panel = document.getElementById("aiCityMapPanel");
+
     if (panel) {
         panel.style.display = "none";
     }
@@ -2785,11 +5582,30 @@ function closeCityMap() {
 function menuComingSoon(event, name) {
     event.preventDefault();
 
-    alert(name + " akan tersedia pada tahap berikutnya.");
+    const modal = document.getElementById("aiCityComingSoonModal");
+    const title = document.getElementById("aiCityComingSoonName");
+
+    if (title) {
+        title.textContent = name;
+    }
 
     closeCityMenu();
 
+    if (modal) {
+        modal.classList.add("open");
+        modal.setAttribute("aria-hidden", "false");
+    }
+
     return false;
+}
+
+function closeComingSoonModal() {
+    const modal = document.getElementById("aiCityComingSoonModal");
+
+    if (modal) {
+        modal.classList.remove("open");
+        modal.setAttribute("aria-hidden", "true");
+    }
 }
 
 document.addEventListener("keydown", function(event) {
@@ -2797,6 +5613,2017 @@ document.addEventListener("keydown", function(event) {
         closeCityMenu();
     }
 });
+
+
+/* AI CITY MAP V3 — CITIZENS JS */
+function aiCityOpenCitizensPanel() {
+    const panel = document.getElementById("aiCityCitizensSubpanel");
+    if (!panel) return;
+
+    panel.classList.add("open");
+
+    const search = document.getElementById("aiCityCitizensSearch");
+    if (search) {
+        search.value = "";
+        aiCityFilterCitizens();
+        setTimeout(function() {
+            search.focus();
+        }, 220);
+    }
+}
+
+function aiCityCloseCitizensPanel() {
+    const panel = document.getElementById("aiCityCitizensSubpanel");
+    if (panel) {
+        panel.classList.remove("open");
+    }
+}
+
+function aiCityFilterCitizens() {
+    const search = document.getElementById("aiCityCitizensSearch");
+    const empty = document.getElementById("aiCityCitizensEmpty");
+    const citizens = document.querySelectorAll(
+        "#aiCityCitizensList .ai-city-online-agent"
+    );
+
+    if (!search) return;
+
+    const query = search.value.trim().toLowerCase();
+    let visibleCount = 0;
+
+    citizens.forEach(function(citizen) {
+        const name = (citizen.dataset.citizenName || "").toLowerCase();
+        const id = (citizen.dataset.citizenId || "").toLowerCase();
+
+        const match =
+            !query ||
+            name.includes(query) ||
+            id.includes(query);
+
+        citizen.style.display = match ? "flex" : "none";
+
+        if (match) {
+            visibleCount++;
+        }
+    });
+
+    if (empty) {
+        empty.style.display = visibleCount === 0 ? "block" : "none";
+    }
+}
+
+/* AI CITY MAP V3 — AGENTS ONLINE JS */
+function aiCityOpenDistrictDetail(districtId) {
+    const detailPanel = document.getElementById("aiCityDistrictDetailPanel");
+    const title = document.getElementById("aiCityDistrictDetailTitle");
+    const content = document.getElementById("aiCityDistrictDetailContent");
+
+    if (!detailPanel || !title || !content) return;
+
+    const physical = {{ physical|tojson }};
+    const districts = physical.districts || [];
+    const district = districts.find(function(item) {
+        return item.id === districtId;
+    });
+
+    if (!district) return;
+
+    title.textContent = district.name || "DISTRICT DETAIL";
+    content.innerHTML = "";
+
+    function addRow(label, value) {
+        const row = document.createElement("div");
+        row.className = "cityhall-test-row";
+        row.textContent = label + ": " + value;
+        content.appendChild(row);
+    }
+
+    addRow("ID", district.id || "unknown");
+    addRow("Type", (district.type || "unknown").toUpperCase());
+    addRow("Status", (district.status || "unknown").toUpperCase());
+    addRow("Description", district.description || "No description");
+    addRow("Citizens", (district.citizens || []).length);
+    addRow("Activities", (district.activities || []).length);
+
+    const buildings = district.buildings || [];
+
+    const header = document.createElement("div");
+    header.className = "cityhall-test-row";
+    header.textContent = "BUILDINGS — " + buildings.length;
+    content.appendChild(header);
+
+    buildings.forEach(function(building) {
+        const card = document.createElement("div");
+        card.className = "ai-city-citizen-card";
+        card.dataset.buildingId = building.id || "";
+        card.onclick = function() {
+            aiCityOpenBuildingDetail(building.id);
+        };
+        card.style.cursor = "pointer";
+
+        const name = document.createElement("div");
+        name.className = "ai-city-citizen-card-name";
+        name.textContent = building.name || "Unnamed Building";
+
+        const status = document.createElement("div");
+        status.className = "ai-city-citizen-card-line";
+        status.textContent =
+            "Status: " + (building.status || "unknown").toUpperCase();
+
+        const type = document.createElement("div");
+        type.className = "ai-city-citizen-card-line";
+        type.textContent =
+            "Type: " + (building.type || "unknown").toUpperCase();
+
+        card.appendChild(name);
+        card.appendChild(status);
+        card.appendChild(type);
+        content.appendChild(card);
+    });
+
+    const districtPanel = document.getElementById("aiCityDistrictsSubpanel");
+    if (districtPanel) {
+        districtPanel.classList.remove("open");
+    }
+
+    detailPanel.classList.add("open");
+}
+
+function aiCityCloseDistrictDetail() {
+    const detailPanel = document.getElementById("aiCityDistrictDetailPanel");
+    if (detailPanel) {
+        detailPanel.classList.remove("open");
+    }
+
+    const districtPanel = document.getElementById("aiCityDistrictsSubpanel");
+    if (districtPanel) {
+        districtPanel.classList.add("open");
+    }
+}
+
+function aiCityOpenBuildingDetail(buildingId) {
+    const detailPanel = document.getElementById("aiCityBuildingDetailPanel");
+    const title = document.getElementById("aiCityBuildingDetailTitle");
+    const content = document.getElementById("aiCityBuildingDetailContent");
+
+    if (!detailPanel || !title || !content) return;
+
+    const physical = {{ physical|tojson }};
+    const districts = physical.districts || [];
+    let selectedBuilding = null;
+    let selectedDistrict = null;
+
+    districts.forEach(function(district) {
+        (district.buildings || []).forEach(function(building) {
+            if (building.id === buildingId) {
+                selectedBuilding = building;
+                selectedDistrict = district;
+            }
+        });
+    });
+
+    if (!selectedBuilding) return;
+
+    title.textContent = selectedBuilding.name || "BUILDING DETAIL";
+    content.innerHTML = "";
+
+    function addRow(label, value) {
+        const row = document.createElement("div");
+        row.className = "cityhall-test-row";
+        row.textContent = label + ": " + value;
+        content.appendChild(row);
+    }
+
+    addRow("ID", selectedBuilding.id || "unknown");
+    addRow("Type", (selectedBuilding.type || "unknown").toUpperCase());
+    addRow("Status", (selectedBuilding.status || "unknown").toUpperCase());
+    addRow("District", selectedDistrict ? selectedDistrict.name : "unknown");
+    addRow("Owner", selectedBuilding.owner || "unknown");
+    addRow("Purpose", selectedBuilding.purpose || "No purpose");
+    addRow("Occupants", (selectedBuilding.occupants || []).length);
+    addRow("Activities", (selectedBuilding.activities || []).length);
+
+    const functions = selectedBuilding.functions || [];
+
+    const header = document.createElement("div");
+    header.className = "cityhall-test-row";
+    header.textContent = "FUNCTIONS — " + functions.length;
+    content.appendChild(header);
+
+    functions.forEach(function(fn) {
+        const card = document.createElement("div");
+        card.className = "ai-city-citizen-card";
+        card.dataset.functionId = fn.id || "";
+        card.onclick = function() {
+            aiCityOpenBuildingFunctionDetail(
+                selectedBuilding.id,
+                fn.id
+            );
+        };
+        card.style.cursor = "pointer";
+
+        const name = document.createElement("div");
+        name.className = "ai-city-citizen-card-name";
+        name.textContent = fn.name || "Unnamed Function";
+
+        const id = document.createElement("div");
+        id.className = "ai-city-citizen-card-line";
+        id.textContent = "ID: " + (fn.id || "unknown");
+
+        const description = document.createElement("div");
+        description.className = "ai-city-citizen-card-line";
+        description.textContent =
+            fn.description || "No description";
+
+        card.appendChild(name);
+        card.appendChild(id);
+        card.appendChild(description);
+        content.appendChild(card);
+    });
+
+    const districtDetailPanel =
+        document.getElementById("aiCityDistrictDetailPanel");
+
+    if (districtDetailPanel) {
+        districtDetailPanel.classList.remove("open");
+    }
+
+    detailPanel.classList.add("open");
+}
+
+function aiCityOpenBuildingFunctionDetail(buildingId, functionId) {
+    const detailPanel =
+        document.getElementById("aiCityFunctionDetailPanel");
+    const title =
+        document.getElementById("aiCityFunctionDetailTitle");
+    const content =
+        document.getElementById("aiCityFunctionDetailContent");
+
+    if (!detailPanel || !title || !content) return;
+
+    const physical = {{ physical|tojson }};
+    const districts = physical.districts || [];
+
+    let selectedBuilding = null;
+    let selectedDistrict = null;
+    let selectedFunction = null;
+
+    districts.forEach(function(district) {
+        (district.buildings || []).forEach(function(building) {
+            if (building.id === buildingId) {
+                selectedBuilding = building;
+                selectedDistrict = district;
+
+                (building.functions || []).forEach(function(fn) {
+                    if (fn.id === functionId) {
+                        selectedFunction = fn;
+                    }
+                });
+            }
+        });
+    });
+
+    if (!selectedBuilding || !selectedFunction) return;
+
+    window.aiCityActiveBuildingId = selectedBuilding.id || "";
+    window.aiCityActiveFunctionId = selectedFunction.id || "";
+
+    const executionResult =
+        document.getElementById("aiCityFunctionExecutionResult");
+
+    if (executionResult) {
+        executionResult.innerHTML = "";
+    }
+
+    title.textContent =
+        selectedFunction.name || "FUNCTION DETAIL";
+
+    content.innerHTML = "";
+
+    function addRow(label, value) {
+        const row = document.createElement("div");
+        row.className = "cityhall-test-row";
+        row.textContent = label + ": " + value;
+        content.appendChild(row);
+    }
+
+    addRow("Function ID", selectedFunction.id || "unknown");
+    addRow("Function Name", selectedFunction.name || "unknown");
+    addRow(
+        "Building",
+        selectedBuilding.name || "unknown"
+    );
+    addRow(
+        "Building ID",
+        selectedBuilding.id || "unknown"
+    );
+    addRow(
+        "District",
+        selectedDistrict ? selectedDistrict.name : "unknown"
+    );
+    addRow(
+        "Description",
+        selectedFunction.description || "No description"
+    );
+
+    const buildingDetailPanel =
+        document.getElementById("aiCityBuildingDetailPanel");
+
+    if (buildingDetailPanel) {
+        buildingDetailPanel.classList.remove("open");
+    }
+
+    detailPanel.classList.add("open");
+}
+
+function aiCityExecuteBuildingFunction() {
+    const buildingId = window.aiCityActiveBuildingId;
+    const functionId = window.aiCityActiveFunctionId;
+    const resultBox =
+        document.getElementById("aiCityFunctionExecutionResult");
+
+    if (!buildingId || !functionId || !resultBox) return;
+
+    resultBox.textContent = "Executing...";
+
+    fetch("/api/building/execute", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            building_id: buildingId,
+            function_id: functionId
+        })
+    })
+    .then(function(response) {
+        return response.json().then(function(data) {
+            return {
+                ok: response.ok,
+                data: data
+            };
+        });
+    })
+    .then(function(payload) {
+        const data = payload.data || {};
+
+        if (!payload.ok) {
+            resultBox.textContent =
+                data.message || "Function execution failed.";
+            return;
+        }
+
+        resultBox.textContent =
+            JSON.stringify(data, null, 2);
+    })
+    .catch(function(error) {
+        resultBox.textContent =
+            "Execution error: " + error.message;
+    });
+}
+
+
+function aiCityCloseFunctionDetail() {
+    const detailPanel =
+        document.getElementById("aiCityFunctionDetailPanel");
+
+    if (detailPanel) {
+        detailPanel.classList.remove("open");
+    }
+
+    const buildingDetailPanel =
+        document.getElementById("aiCityBuildingDetailPanel");
+
+    if (buildingDetailPanel) {
+        buildingDetailPanel.classList.add("open");
+    }
+}
+
+function aiCityCloseBuildingDetail() {
+    const detailPanel =
+        document.getElementById("aiCityBuildingDetailPanel");
+
+    if (detailPanel) {
+        detailPanel.classList.remove("open");
+    }
+
+    const districtDetailPanel =
+        document.getElementById("aiCityDistrictDetailPanel");
+
+    if (districtDetailPanel) {
+        districtDetailPanel.classList.add("open");
+    }
+}
+
+function aiCityOpenDistrictsPanel() {
+    const panel = document.getElementById("aiCityDistrictsSubpanel");
+    if (!panel) return;
+    panel.classList.add("open");
+}
+
+function aiCityCloseDistrictsPanel() {
+    const panel = document.getElementById("aiCityDistrictsSubpanel");
+    if (panel) {
+        panel.classList.remove("open");
+    }
+}
+
+function aiCityOpenAgentsPanel() {
+    const panel = document.getElementById("aiCityAgentsSubpanel");
+    if (!panel) return;
+
+    panel.classList.add("open");
+
+    const search = document.getElementById("aiCityAgentsSearch");
+    if (search) {
+        search.value = "";
+        aiCityFilterAgents();
+        setTimeout(function() {
+            search.focus();
+        }, 220);
+    }
+}
+
+function aiCityCloseAgentsPanel() {
+    const panel = document.getElementById("aiCityAgentsSubpanel");
+    if (panel) {
+        panel.classList.remove("open");
+    }
+}
+
+function aiCityFilterAgents() {
+    const search = document.getElementById("aiCityAgentsSearch");
+    const empty = document.getElementById("aiCityAgentsEmpty");
+    const agents = document.querySelectorAll(".ai-city-online-agent");
+
+    if (!search) return;
+
+    const query = search.value.trim().toLowerCase();
+    let visibleCount = 0;
+
+    agents.forEach(function(agent) {
+        const name = (agent.dataset.agentName || "").toLowerCase();
+        const id = (agent.dataset.agentId || "").toLowerCase();
+
+        const match =
+            !query ||
+            name.includes(query) ||
+            id.includes(query);
+
+        agent.style.display = match ? "flex" : "none";
+
+        if (match) {
+            visibleCount++;
+        }
+    });
+
+    if (empty) {
+        empty.style.display = visibleCount === 0 ? "block" : "none";
+    }
+}
+
+/* =========================================================
+ * AI CITY — PERSONAL SPACE CONTROLLER V1
+ * ========================================================= */
+
+function aiCityOpenPersonalSpace(agentId, arrival) {
+    const personalSpace = document.getElementById("aiCityPersonalSpace");
+    const mapPanel = document.getElementById("aiCityMapPanel");
+
+    if (!personalSpace) {
+        console.warn("AI CITY PERSONAL SPACE: shell tidak ditemukan");
+        return;
+    }
+
+    const citizen = Array.from(
+        document.querySelectorAll(".ai-city-map-v3-agent")
+    ).find(function(element) {
+        return element.dataset.agentId === agentId;
+    });
+
+    let agentName = "AGENT";
+
+    if (citizen && citizen.dataset.agentName) {
+        agentName = citizen.dataset.agentName;
+    }
+
+    const agentLabel =
+        personalSpace.querySelector(".ai-city-personal-space-agent");
+
+    const menuTitle =
+        personalSpace.querySelector(".ai-city-personal-space-menu-title");
+
+    const badge =
+        document.getElementById("aiCityPersonalSpaceBadge");
+
+    if (agentLabel) {
+        agentLabel.textContent = String(agentName).toUpperCase();
+    }
+
+    if (menuTitle) {
+        menuTitle.textContent = String(agentName).toUpperCase();
+    }
+
+    if (badge) {
+        badge.textContent =
+            String(agentName).toUpperCase() +
+            " · PERSONAL SPACE · ONLINE";
+    }
+
+    personalSpace.dataset.agentId = agentId;
+    personalSpace.dataset.residenceId =
+        arrival && arrival.residence_id
+            ? arrival.residence_id
+            : "";
+
+    try {
+        sessionStorage.setItem(
+            "aiCityPersonalSpaceState",
+            JSON.stringify({
+                agentId: agentId,
+                residenceId:
+                    arrival && arrival.residence_id
+                        ? arrival.residence_id
+                        : "",
+                lastPosition:
+                    typeof aiCityV2FinalPositions !== "undefined" &&
+                    aiCityV2FinalPositions.has(agentId)
+                        ? aiCityV2FinalPositions.get(agentId).position
+                        : null
+            })
+        );
+    } catch (error) {
+        console.warn(
+            "AI CITY PERSONAL SPACE: state storage gagal",
+            error
+        );
+    }
+
+    if (mapPanel) {
+        mapPanel.style.display = "none";
+    }
+
+    if (typeof aiCityStopMovementLoop === "function") {
+        aiCityStopMovementLoop();
+    }
+
+    const menu =
+        document.getElementById("aiCityPersonalSpaceMenu");
+
+    if (menu) {
+        menu.style.display = "none";
+    }
+
+    personalSpace.style.display = "block";
+
+    console.log(
+        "AI CITY PERSONAL SPACE OPEN:",
+        agentName,
+        agentId,
+        arrival
+    );
+}
+
+function aiCityClosePersonalSpace() {
+    const personalSpace =
+        document.getElementById("aiCityPersonalSpace");
+
+    const mapPanel =
+        document.getElementById("aiCityMapPanel");
+
+    if (!personalSpace) return;
+
+    personalSpace.style.display = "none";
+
+    if (mapPanel) {
+        mapPanel.style.display = "";
+    }
+
+    const menu =
+        document.getElementById("aiCityPersonalSpaceMenu");
+
+    if (menu) {
+        menu.style.display = "none";
+    }
+
+    personalSpace.dataset.agentId = "";
+    personalSpace.dataset.residenceId = "";
+
+    try {
+        /*
+         * C30 — PERSIST LAST MOVEMENT V2 POSITION ACROSS
+         * EXIT HOME -> MAP V3 -> REFRESH.
+         */
+        if (
+            typeof aiCityV2FinalPositions !== "undefined" &&
+            aiCityV2FinalPositions.size > 0
+        ) {
+            const mapPositionState = {};
+
+            aiCityV2FinalPositions.forEach(function(
+                position,
+                agentId
+            ) {
+                mapPositionState[agentId] = {
+                    citizen_id: agentId,
+                    position: position.position
+                };
+            });
+
+            sessionStorage.setItem(
+                "aiCityLastMovementPositionState",
+                JSON.stringify(mapPositionState)
+            );
+        }
+
+        sessionStorage.removeItem("aiCityPersonalSpaceState");
+        sessionStorage.setItem("aiCityMapState", "open");
+    } catch (error) {
+        console.warn(
+            "AI CITY PERSONAL SPACE: state clear gagal",
+            error
+        );
+    }
+
+    console.log("AI CITY PERSONAL SPACE CLOSED");
+
+    /*
+     * Pertahankan posisi terakhir Movement V2.
+     * Jangan refresh /api/city di sini karena posisi persistent
+     * agent masih dapat menunjuk ke posisi lama seperti City Hall.
+     */
+    if (typeof aiCityV2FinalPositions !== "undefined") {
+        aiCityV2FinalPositions.forEach(function(position, agentId) {
+            aiCityApplyAgentVisualPositions([
+                {
+                    citizen_id: agentId,
+                    position: position.position
+                }
+            ]);
+        });
+    }
+}
+
+function aiCityOpenPersonalSpaceProfile() {
+    const panel =
+        document.getElementById("aiCityPersonalSpaceProfilePanel");
+
+    if (!panel) {
+        console.warn(
+            "AI CITY PERSONAL SPACE PROFILE: panel tidak ditemukan"
+        );
+        return;
+    }
+
+    panel.classList.add("open");
+
+    console.log(
+        "AI CITY PERSONAL SPACE PROFILE: OPEN"
+    );
+}
+
+function aiCityClosePersonalSpaceProfile() {
+    const panel =
+        document.getElementById("aiCityPersonalSpaceProfilePanel");
+
+    if (!panel) return;
+
+    panel.classList.remove("open");
+
+    console.log(
+        "AI CITY PERSONAL SPACE PROFILE: CLOSED"
+    );
+}
+
+function aiCityTogglePersonalSpaceMenu() {
+    const menu =
+        document.getElementById("aiCityPersonalSpaceMenu");
+
+    if (!menu) return;
+
+    menu.style.display =
+        menu.style.display === "block"
+            ? "none"
+            : "block";
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    try {
+        const savedState =
+            sessionStorage.getItem(
+                "aiCityPersonalSpaceState"
+            );
+
+        if (savedState) {
+            const state = JSON.parse(savedState);
+
+            if (state && state.agentId) {
+                const agentElement =
+                    document.querySelector(
+                        '.ai-city-map-v3-agent[data-agent-id="' +
+                        state.agentId +
+                        '"]'
+                    );
+
+                if (agentElement) {
+                    if (
+                    state.lastPosition &&
+                    typeof aiCityV2FinalPositions !== "undefined"
+                ) {
+                    aiCityV2FinalPositions.set(
+                        state.agentId,
+                        {
+                            citizen_id: state.agentId,
+                            position: state.lastPosition
+                        }
+                    );
+                }
+
+                const savedArrival = {
+                        residence_id:
+                            state.residenceId || ""
+                    };
+
+                    aiCityOpenPersonalSpace(
+                        state.agentId,
+                        savedArrival
+                    );
+
+                    console.log(
+                        "AI CITY PERSONAL SPACE: RESTORED",
+                        state.agentId,
+                        state.residenceId
+                    );
+                }
+            }
+        }
+    } catch (error) {
+        console.warn(
+            "AI CITY PERSONAL SPACE: restore gagal",
+            error
+        );
+    }
+
+    try {
+        const savedMapState =
+            sessionStorage.getItem("aiCityMapState");
+
+        const savedPersonalState =
+            sessionStorage.getItem("aiCityPersonalSpaceState");
+
+        if (savedMapState === "open" && !savedPersonalState) {
+            const mapPanel =
+                document.getElementById("aiCityMapPanel");
+
+            if (mapPanel) {
+                mapPanel.style.display = "block";
+                console.log(
+                    "AI CITY MAP: RESTORED"
+                );
+
+                if (typeof aiCityUpdateAgentPositions === "function") {
+                    aiCityUpdateAgentPositions();
+                  /*
+                   * C30 — RESTORE LAST MOVEMENT V2 POSITION
+                   * Pulihkan posisi terakhir Movement V2 setelah
+                   * EXIT HOME -> Map V3 -> Refresh.
+                   */
+                  try {
+                      const savedMovementPositionState =
+                          sessionStorage.getItem(
+                              "aiCityLastMovementPositionState"
+                          );
+
+                      if (
+                          savedMovementPositionState &&
+                          typeof aiCityV2FinalPositions !== "undefined"
+                      ) {
+                          const movementPositionState =
+                              JSON.parse(savedMovementPositionState);
+
+                          Object.keys(
+                              movementPositionState
+                          ).forEach(function(agentId) {
+                              const savedPosition =
+                                  movementPositionState[agentId];
+
+                              if (
+                                  savedPosition &&
+                                  savedPosition.position
+                              ) {
+                                  aiCityV2FinalPositions.set(
+                                      agentId,
+                                      {
+                                          citizen_id: agentId,
+                                          position:
+                                              savedPosition.position
+                                      }
+                                  );
+                              }
+                          });
+                      }
+                  } catch (error) {
+                      console.warn(
+                          "AI CITY MAP: C30 last movement position restore gagal",
+                          error
+                      );
+                  }
+                }
+
+                /*
+                 * C27 — EXIT HOME POSITION RESTORE
+                 * /api/city dapat mengembalikan posisi persistent lama.
+                 * Movement V2 harus menjadi posisi visual terakhir.
+                 */
+                if (
+                    typeof aiCityV2FinalPositions !== "undefined" &&
+                    aiCityV2FinalPositions.size > 0
+                ) {
+                    aiCityApplyAgentVisualPositions(
+                        Array.from(aiCityV2FinalPositions.values())
+                    );
+                }
+
+                if (typeof aiCityStartMovementLoop === "function") {
+                    aiCityStartMovementLoop();
+                }
+            }
+        }
+    } catch (error) {
+        console.warn(
+            "AI CITY MAP: restore gagal",
+            error
+        );
+    }
+
+    const menuButton =
+        document.getElementById(
+            "aiCityPersonalSpaceMenuButton"
+        );
+
+    const exitButton =
+        document.getElementById(
+            "aiCityPersonalSpaceExit"
+        );
+
+    const talkDuduButton =
+        document.getElementById(
+            "aiCityPersonalSpaceTalkDudu"
+        );
+
+    if (talkDuduButton) {
+        talkDuduButton.addEventListener(
+            "click",
+            function() {
+                const voicePanel =
+                    document.getElementById(
+                        "aiCityDuduVoicePanel"
+                    );
+
+                if (voicePanel) {
+                    voicePanel.classList.add("open");
+                }
+            }
+        );
+    }
+
+    const closeDuduVoiceButton =
+        document.getElementById(
+            "aiCityDuduVoicePanelClose"
+        );
+
+    if (closeDuduVoiceButton) {
+        closeDuduVoiceButton.addEventListener(
+            "click",
+            function() {
+                const voicePanel =
+                    document.getElementById(
+                        "aiCityDuduVoicePanel"
+                    );
+
+                if (voicePanel) {
+                    voicePanel.classList.remove("open");
+                }
+            }
+        );
+    }
+
+    if (menuButton) {
+        menuButton.addEventListener(
+            "click",
+            aiCityTogglePersonalSpaceMenu
+        );
+    }
+
+    if (exitButton) {
+        exitButton.addEventListener(
+            "click",
+            aiCityClosePersonalSpace
+        );
+    }
+});
+
+
+</script>
+
+
+<!-- =========================================================
+     AI CITY — RESIDENTIAL PERSONAL SPACE V1
+     Visual layer only — tidak mengubah Map V3 state
+     ========================================================= -->
+<div id="aiCityPersonalSpace"
+     style="display:none; position:fixed; inset:0; z-index:2147483647;">
+
+    <div id="aiCityPersonalSpaceBackground"></div>
+
+    <button
+        id="aiCityPersonalSpaceMenuButton"
+        type="button"
+        aria-label="Open Dudu Personal Space Menu">
+        <span class="ai-city-personal-space-menu-icon">☰</span>
+    </button>
+
+    <div id="aiCityPersonalSpaceTitle">
+        <div class="ai-city-personal-space-agent">
+            DUDU
+        </div>
+        <div class="ai-city-personal-space-subtitle">
+            PERSONAL SPACE
+        </div>
+    </div>
+
+    <div id="aiCityPersonalSpaceMenu">
+        <div class="ai-city-personal-space-menu-title">
+            DUDU
+        </div>
+
+        <div class="ai-city-personal-space-menu-section">
+            IDENTITY
+        </div>
+
+        <button
+        type="button"
+        onclick="aiCityOpenPersonalSpaceProfile()">
+        👤 AGENT PROFILE
+    </button>
+        <button type="button">🪪 AGENT PASSPORT</button>
+
+        <div class="ai-city-personal-space-menu-section">
+            DUDU
+        </div>
+
+        <button type="button">🏠 HOME</button>
+        <button type="button">🧠 MEMORY</button>
+        <button type="button">📚 KNOWLEDGE</button>
+        <button type="button">🔗 RELATIONSHIPS</button>
+        <button type="button">⚡ ACTIVITIES</button>
+
+        <div class="ai-city-personal-space-menu-divider"></div>
+
+        <div class="ai-city-personal-space-menu-section">
+            RESIDENCE
+        </div>
+
+        <button type="button">🛋️ LIVING ROOM</button>
+        <button type="button">🛏️ BEDROOM</button>
+        <button type="button">💻 WORKSPACE</button>
+        <button type="button">🍽️ KITCHEN / DINING</button>
+        <button type="button">🚿 BATHROOM</button>
+        <button type="button">🌅 PRIVATE BALCONY</button>
+
+        <div class="ai-city-personal-space-menu-divider"></div>
+
+        <div class="ai-city-personal-space-menu-section">
+            CONTROL
+        </div>
+
+        <button
+            type="button"
+            id="aiCityPersonalSpaceTalkDudu">
+            🎙️ TALK TO DUDU
+        </button>
+
+        <button type="button">🤖 AGENT STATUS</button>
+        <button type="button">⚙️ RESIDENCE SETTINGS</button>
+
+        <div class="ai-city-personal-space-menu-divider"></div>
+
+        <button
+            type="button"
+            id="aiCityPersonalSpaceExit">
+            ← EXIT HOME
+        </button>
+    </div>
+
+    <!-- =====================================================
+         AI CITY — DUDU VOICE SIDE PANEL C22
+         ===================================================== -->
+    <div id="aiCityDuduVoicePanel">
+        <button
+            type="button"
+            id="aiCityDuduVoicePanelClose"
+            aria-label="Close Dudu Voice Panel">
+            ←
+        </button>
+
+        <div id="aiCityDuduVoicePanelTitle">
+            🎙️ DUDU VOICE
+        </div>
+
+        <iframe
+            id="aiCityDuduVoiceFrame"
+            src="/dudu-voice"
+            title="Dudu Voice"
+            allow="microphone">
+        </iframe>
+    </div>
+
+    <!-- AI CITY — DUDU AGENT PROFILE SUBPANEL V1 -->
+    <div id="aiCityPersonalSpaceProfilePanel">
+        <div class="ai-city-personal-space-profile-header">
+            <button
+                type="button"
+                class="ai-city-personal-space-profile-back"
+                onclick="aiCityClosePersonalSpaceProfile()"
+                aria-label="Close Agent Profile">←</button>
+
+            <div class="ai-city-personal-space-profile-title">
+                AGENT PROFILE
+            </div>
+        </div>
+
+        <div class="ai-city-personal-space-profile-card">
+            <div class="ai-city-personal-space-profile-icon">
+                🤖
+            </div>
+
+            <div class="ai-city-personal-space-profile-name">
+                DUDU
+            </div>
+
+            <div class="ai-city-personal-space-profile-id">
+                Agent-001
+            </div>
+
+            <div class="ai-city-personal-space-profile-role">
+                AI CITY Citizen
+            </div>
+
+            <div class="ai-city-personal-space-profile-status">
+                ● ACTIVE
+            </div>
+        </div>
+
+        <div class="ai-city-personal-space-profile-stats">
+            <div class="ai-city-personal-space-profile-stat">
+                <div class="number">0</div>
+                <div class="label">💬 Conversations</div>
+            </div>
+
+            <div class="ai-city-personal-space-profile-stat">
+                <div class="number">0</div>
+                <div class="label">🧠 Knowledge</div>
+            </div>
+
+            <div class="ai-city-personal-space-profile-stat">
+                <div class="number">0</div>
+                <div class="label">⭐ Experiences</div>
+            </div>
+
+            <div class="ai-city-personal-space-profile-stat">
+                <div class="number">0</div>
+                <div class="label">🤝 Relationships</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+#aiCityPersonalSpace {
+    background: #050b14;
+    overflow: hidden;
+}
+
+/* =========================================================
+   AI CITY — DUDU VOICE SIDE PANEL C22
+   ========================================================= */
+
+#aiCityDuduVoicePanel {
+    position: absolute;
+    top: 82px;
+    left: 169px;
+    width: 175px;
+    height: min(72vh, 620px);
+
+    z-index: 40;
+
+    display: none;
+
+    border: 1px solid rgba(120,190,255,.25);
+    border-radius: 18px;
+
+    background: rgba(4,12,24,.96);
+    backdrop-filter: blur(18px);
+
+    box-shadow:
+        0 20px 60px rgba(0,0,0,.60);
+
+    overflow: hidden;
+}
+
+#aiCityDuduVoicePanel.open {
+    display: block;
+}
+
+#aiCityDuduVoicePanelClose {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+
+    z-index: 3;
+
+    width: 36px;
+    height: 36px;
+
+    border: 1px solid rgba(120,190,255,.25);
+    border-radius: 10px;
+
+    background: rgba(5,14,28,.85);
+    color: white;
+
+    font-size: 20px;
+    line-height: 1;
+
+    cursor: pointer;
+}
+
+#aiCityDuduVoicePanelClose:hover {
+    background: rgba(80,170,255,.18);
+}
+
+#aiCityDuduVoicePanelTitle {
+    position: absolute;
+    top: 13px;
+    left: 16px;
+
+    z-index: 2;
+
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+
+    pointer-events: none;
+}
+
+#aiCityDuduVoiceFrame {
+    position: absolute;
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    border: 0;
+    background: #111;
+}
+
+#aiCityPersonalSpaceBackground {
+    position: absolute;
+    inset: 0;
+
+    background-image:
+        linear-gradient(
+            180deg,
+            rgba(3,8,16,.08),
+            rgba(3,8,16,.18)
+        ),
+        url("/static/residences/dudu/residence_current.png");
+
+    background-size: contain;
+    background-position: center center;
+    background-repeat: no-repeat;
+
+    filter: saturate(1.04) contrast(1.02);
+}
+
+#aiCityPersonalSpaceMenuButton {
+    position: absolute;
+    top: 22px;
+    left: 22px;
+    z-index: 20;
+
+    width: 48px;
+    height: 48px;
+
+    border: 1px solid rgba(120,190,255,.28);
+    border-radius: 14px;
+
+    background: rgba(5,14,28,.72);
+    backdrop-filter: blur(12px);
+
+    color: white;
+    font-size: 23px;
+    cursor: pointer;
+
+    box-shadow:
+        0 8px 30px rgba(0,0,0,.35);
+}
+
+#aiCityPersonalSpaceTitle {
+    position: absolute;
+    top: 26px;
+    left: 84px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.ai-city-personal-space-agent {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.ai-city-personal-space-subtitle {
+    margin-top: 3px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    opacity: .55;
+}
+
+#aiCityPersonalSpaceMenu {
+    position: absolute;
+    top: 82px;
+    left: 4px;
+    z-index: 30;
+
+    width: 165px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 9px;
+
+    display: none;
+
+    border: 1px solid rgba(120,190,255,.22);
+    border-radius: 18px;
+
+    background: rgba(4,12,24,.92);
+    backdrop-filter: blur(18px);
+
+    box-shadow:
+        0 20px 60px rgba(0,0,0,.55);
+}
+
+.ai-city-personal-space-menu-title {
+    padding: 6px 7px 8px;
+
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+
+    opacity: .8;
+}
+
+/* AI CITY — DUDU AGENT PROFILE SUBPANEL V1 */
+
+#aiCityPersonalSpaceProfilePanel {
+    position: absolute;
+    top: 82px;
+    left: 169px;
+    z-index: 31;
+
+    width: 175px;
+    max-height: 70vh;
+    box-sizing: border-box;
+
+    padding: 10px 8px 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    border: 1px solid rgba(120,190,255,.22);
+    border-radius: 18px;
+
+    background: linear-gradient(
+        180deg,
+        rgba(2,18,35,.98),
+        rgba(1,11,22,.98)
+    );
+
+    backdrop-filter: blur(18px);
+
+    box-shadow:
+        12px 0 36px rgba(0,0,0,.30);
+
+    display: none;
+}
+
+#aiCityPersonalSpaceProfilePanel.open {
+    display: block;
+}
+
+.ai-city-personal-space-profile-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    min-height: 28px;
+    margin-bottom: 14px;
+}
+
+.ai-city-personal-space-profile-back {
+    flex: 0 0 auto;
+
+    width: 28px;
+    height: 28px;
+
+    padding: 0;
+
+    border: 1px solid rgba(0,180,255,.35);
+    border-radius: 7px;
+
+    background: rgba(0,100,170,.14);
+    color: #d9f4ff;
+
+    font-size: 17px;
+    line-height: 1;
+
+    cursor: pointer;
+}
+
+.ai-city-personal-space-profile-back:active {
+    transform: scale(.96);
+}
+
+.ai-city-personal-space-profile-title {
+    min-width: 0;
+
+    color: rgba(120,205,255,.90);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+}
+
+.ai-city-personal-space-profile-card {
+    padding: 10px 8px;
+
+    border: 1px solid rgba(120,190,255,.14);
+    border-radius: 14px;
+
+    background: rgba(255,255,255,.035);
+
+    text-align: center;
+}
+
+.ai-city-personal-space-profile-icon {
+    font-size: 30px;
+    line-height: 1;
+
+    margin-bottom: 6px;
+}
+
+.ai-city-personal-space-profile-name {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.ai-city-personal-space-profile-id {
+    margin-top: 3px;
+
+    color: rgba(180,220,245,.60);
+    font-size: 9px;
+    letter-spacing: 1.2px;
+}
+
+.ai-city-personal-space-profile-role {
+    margin-top: 5px;
+
+    color: rgba(255,255,255,.68);
+    font-size: 10px;
+    letter-spacing: .7px;
+}
+
+.ai-city-personal-space-profile-status {
+    margin-top: 6px;
+
+    color: #55ff99;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+}
+
+.ai-city-personal-space-profile-stats {
+    display: flex;
+    flex-direction: column;
+
+    gap: 5px;
+    margin-top: 8px;
+}
+
+.ai-city-personal-space-profile-stat {
+    padding: 7px 6px;
+
+    border: 1px solid rgba(120,190,255,.12);
+    border-radius: 10px;
+
+    background: rgba(255,255,255,.035);
+
+    text-align: center;
+}
+
+.ai-city-personal-space-profile-stat .number {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.ai-city-personal-space-profile-stat .label {
+    margin-top: 5px;
+
+    color: rgba(255,255,255,.60);
+    font-size: 8px;
+    line-height: 1.3;
+}
+
+#aiCityPersonalSpaceMenu button {
+    width: 100%;
+    padding: 11px 10px;
+
+    border: 0;
+    border-radius: 9px;
+
+    background: transparent;
+    color: rgba(255,255,255,.82);
+
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 1px;
+
+    cursor: pointer;
+}
+
+#aiCityPersonalSpaceMenu button:hover {
+    background: rgba(80,170,255,.10);
+}
+
+.ai-city-personal-space-menu-divider {
+    height: 1px;
+    margin: 8px 0;
+
+    background: rgba(120,190,255,.12);
+}
+
+#aiCityPersonalSpaceBadge {
+    position: absolute;
+    right: 22px;
+    top: 22px;
+    z-index: 10;
+
+    padding: 8px 12px;
+
+    border: 1px solid rgba(120,190,255,.20);
+    border-radius: 20px;
+
+    background: rgba(5,14,28,.60);
+    backdrop-filter: blur(10px);
+
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    opacity: .75;
+}
+</style>
+
+
+<script>
+window.aiCityCityHallProbe = "CITYHALL_SCRIPT_LOADED";
+function aiCityToggleCityHall() {
+    const submenu = document.getElementById("aiCityCityHallSubmenu");
+    const toggle = document.querySelector(".ai-city-cityhall-toggle");
+
+    if (!submenu) return;
+
+    const open = submenu.classList.toggle("open");
+
+    if (toggle) {
+        toggle.classList.toggle("expanded", open);
+    }
+}
+
+function aiCityCloseCityHallPanel() {
+    const panel = document.getElementById("aiCityCityHallDetailPanel");
+    if (!panel) return;
+
+    if (aiCityCityHallReturnPanel === "registry") {
+        aiCityCityHallReturnPanel = null;
+        aiCityOpenCityHallPanel("registry");
+        return;
+    }
+
+    panel.classList.remove("open");
+    panel.style.display = "";
+    panel.style.visibility = "";
+    panel.style.opacity = "";
+    panel.style.pointerEvents = "";
+    panel.style.transform = "";
+}
+
+let aiCityCityHallReturnPanel = null;
+
+function aiCityOpenCitizenDetail(index) {
+    const citizens = {{ citizens|tojson }};
+    const citizen = citizens[index];
+
+    const panel = document.getElementById("aiCityCityHallDetailPanel");
+    const title = document.getElementById("aiCityCityHallDetailTitle");
+    const content = document.getElementById("aiCityCityHallDetailContent");
+
+    if (!citizen || !panel || !title || !content) return;
+
+    aiCityCityHallReturnPanel = "registry";
+
+    title.textContent = "Citizen Detail";
+
+    const rows = [
+        "Name: " + (citizen.name || "—"),
+        "Agent ID: " + (citizen.id || "—"),
+        "Role: " + (citizen.role || "—"),
+        "Status: " + (citizen.status || "—").toUpperCase()
+    ];
+
+    if (citizen.owner) rows.push("Owner: " + citizen.owner);
+    if (citizen.personality) rows.push("Personality: " + citizen.personality);
+    if (citizen.purpose) rows.push("Purpose: " + citizen.purpose);
+    if (citizen.created_at) rows.push("Created: " + citizen.created_at);
+
+    content.innerHTML = rows.map(function(row) {
+        return '<div class="cityhall-test-row">' + row + '</div>';
+    }).join("");
+
+    panel.classList.add("open");
+}
+
+function aiCityOpenCityHallPanel(type) {
+    const panel = document.getElementById("aiCityCityHallDetailPanel");
+    const title = document.getElementById("aiCityCityHallDetailTitle");
+    const content = document.getElementById("aiCityCityHallDetailContent");
+
+    if (!panel || !title || !content) return;
+
+    const data = {
+        registry: {
+            title: "Citizen Registry",
+            rows: (function() {
+                const citizens = {{ citizens|tojson }};
+                return [
+                    "REGISTERED CITIZENS: " + citizens.length
+                ];
+            })()
+        },
+        identity: {
+            title: "Agent Identity",
+            rows: (function() {
+                const citizens = {{ citizens|tojson }};
+                return [
+                    "REGISTERED IDENTITIES: " + citizens.length
+                ];
+            })()
+        },
+        passport: {
+            title: "Agent Passport",
+            rows: (function() {
+                const passportRegistry = {{ passport_registry|tojson }};
+                const passports = passportRegistry.passports || [];
+
+                return [
+                    "PASSPORT REGISTRY",
+                    "REGISTERED PASSPORTS: " + passports.length
+                ];
+            })()
+        },
+        administration: {
+            title: "City Administration",
+            rows: [
+                "DISTRICT REGISTRY",
+                "BUILDING REGISTRY",
+                "CITY RULES"
+            ]
+        }
+    };
+
+    const item = data[type];
+    if (!item) return;
+
+    title.textContent = item.title;
+    content.innerHTML = item.rows.map(function(row) {
+        return '<div class="cityhall-test-row">' + row + '</div>';
+    }).join("");
+
+    if (type === "administration") {
+        const physical = {{ physical|tojson }};
+        const principles = {{ principles|tojson }};
+
+        const districts = physical.districts || [];
+        const buildings = [];
+
+        districts.forEach(function(district) {
+            (district.buildings || []).forEach(function(building) {
+                buildings.push({
+                    district: district.name || "Unnamed District",
+                    building: building
+                });
+            });
+        });
+
+        const districtHeader = document.createElement("div");
+        districtHeader.className = "cityhall-test-row";
+        districtHeader.textContent =
+            "DISTRICT REGISTRY — " + districts.length + " REGISTERED";
+        content.appendChild(districtHeader);
+
+        districts.forEach(function(district) {
+            const card = document.createElement("div");
+            card.className = "ai-city-citizen-card";
+
+            const name = document.createElement("div");
+            name.className = "ai-city-citizen-card-name";
+            name.textContent = district.name || "Unnamed District";
+
+            const status = document.createElement("div");
+            status.className = "ai-city-citizen-card-line";
+            status.textContent =
+                "Status: " + (district.status || "unknown").toUpperCase();
+
+            card.appendChild(name);
+            card.appendChild(status);
+            content.appendChild(card);
+        });
+
+        const buildingHeader = document.createElement("div");
+        buildingHeader.className = "cityhall-test-row";
+        buildingHeader.textContent =
+            "BUILDING REGISTRY — " + buildings.length + " REGISTERED";
+        content.appendChild(buildingHeader);
+
+        buildings.forEach(function(entry) {
+            const card = document.createElement("div");
+            card.className = "ai-city-citizen-card";
+
+            const name = document.createElement("div");
+            name.className = "ai-city-citizen-card-name";
+            name.textContent =
+                entry.building.name || "Unnamed Building";
+
+            const status = document.createElement("div");
+            status.className = "ai-city-citizen-card-line";
+            status.textContent =
+                "Status: " +
+                (entry.building.status || "unknown").toUpperCase();
+
+            const district = document.createElement("div");
+            district.className = "ai-city-citizen-card-line";
+            district.textContent =
+                "District: " + entry.district;
+
+            card.appendChild(name);
+            card.appendChild(status);
+            card.appendChild(district);
+            content.appendChild(card);
+        });
+
+        const rulesHeader = document.createElement("div");
+        rulesHeader.className = "cityhall-test-row";
+        rulesHeader.textContent =
+            "CITY RULES — CONSTITUTION V{{ constitution_version }}";
+        content.appendChild(rulesHeader);
+
+        principles.forEach(function(rule) {
+            const card = document.createElement("div");
+            card.className = "ai-city-citizen-card";
+
+            const name = document.createElement("div");
+            name.className = "ai-city-citizen-card-name";
+            name.textContent =
+                (rule.id || "—") + " — " +
+                (rule.name || "Unnamed Rule");
+
+            const description = document.createElement("div");
+            description.className = "ai-city-citizen-card-line";
+            description.textContent =
+                rule.description || "No description";
+
+            card.appendChild(name);
+            card.appendChild(description);
+            content.appendChild(card);
+        });
+    }
+
+    if (type === "passport") {
+        const citizens = {{ citizens|tojson }};
+        const passportRegistry = {{ passport_registry|tojson }};
+        const passports = passportRegistry.passports || [];
+
+        citizens.forEach(function(citizen) {
+            const card = document.createElement("div");
+            card.className = "ai-city-citizen-card";
+
+            const name = document.createElement("div");
+            name.className = "ai-city-citizen-card-name";
+            name.textContent = citizen.name || "Unnamed Agent";
+
+            const idLine = document.createElement("div");
+            idLine.className = "ai-city-citizen-card-line";
+            idLine.textContent = "Agent ID: " + (citizen.id || "—");
+
+            const roleLine = document.createElement("div");
+            roleLine.className = "ai-city-citizen-card-line";
+            roleLine.textContent = "Role: " + (citizen.role || "—");
+
+            const statusLine = document.createElement("div");
+            statusLine.className = "ai-city-citizen-card-line";
+            statusLine.textContent =
+                "Status: " + (citizen.status || "—").toUpperCase();
+
+            if (citizen.owner) {
+                const ownerLine = document.createElement("div");
+                ownerLine.className = "ai-city-citizen-card-line";
+                ownerLine.textContent = "Owner: " + citizen.owner;
+                card.appendChild(ownerLine);
+            }
+
+            if (citizen.created_at) {
+                const createdLine = document.createElement("div");
+                createdLine.className = "ai-city-citizen-card-line";
+                createdLine.textContent = "Created: " + citizen.created_at;
+                card.appendChild(createdLine);
+            }
+
+            const passport = passports.find(function(entry) {
+                return String(entry.agent_id || "") === String(citizen.id || "");
+            });
+
+            const passportStatusLine = document.createElement("div");
+            passportStatusLine.className = "ai-city-citizen-card-line";
+            passportStatusLine.textContent = passport
+                ? "Passport Status: " + (passport.status || "issued").toUpperCase()
+                : "Passport Status: NOT YET ISSUED";
+
+            const verificationLine = document.createElement("div");
+            verificationLine.className = "ai-city-citizen-card-line";
+            verificationLine.textContent = passport
+                ? "Verification: " + (
+                    passport.verification &&
+                    passport.verification.status
+                        ? passport.verification.status.toUpperCase()
+                        : "PENDING"
+                )
+                : "Verification: NOT AVAILABLE";
+
+            const historyLine = document.createElement("div");
+            historyLine.className = "ai-city-citizen-card-line";
+            historyLine.textContent = passport
+                ? "History: PASSPORT ISSUED"
+                : "History: NO RECORDS";
+
+            card.appendChild(passportStatusLine);
+
+            if (passport) {
+                const passportIdLine = document.createElement("div");
+                passportIdLine.className = "ai-city-citizen-card-line";
+                passportIdLine.textContent =
+                    "Passport ID: " + (passport.passport_id || "—");
+
+                const issuedByLine = document.createElement("div");
+                issuedByLine.className = "ai-city-citizen-card-line";
+                issuedByLine.textContent =
+                    "Issued By: " + (passport.issued_by || "—");
+
+                const issuedAtLine = document.createElement("div");
+                issuedAtLine.className = "ai-city-citizen-card-line";
+                issuedAtLine.textContent =
+                    "Issued At: " + (passport.issued_at || "—");
+
+                card.appendChild(passportIdLine);
+                card.appendChild(issuedByLine);
+                card.appendChild(issuedAtLine);
+            }
+
+            card.appendChild(verificationLine);
+            card.appendChild(historyLine);
+
+            if (!passport) {
+                const issueButton = document.createElement("button");
+                issueButton.type = "button";
+                issueButton.className = "ai-city-citizen-card-button";
+                issueButton.textContent = "ISSUE PASSPORT";
+    
+                issueButton.addEventListener("click", async function() {
+                    issueButton.disabled = true;
+                    issueButton.textContent = "ISSUING...";
+    
+                    try {
+                        const body = new URLSearchParams();
+                        body.set("agent_id", citizen.id || "");
+    
+                        const response = await fetch(
+                            "/cityhall/passport/issue",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/x-www-form-urlencoded"
+                                },
+                                body: body.toString()
+                            }
+                        );
+    
+                        const result = await response.json();
+    
+                        if (!response.ok || !result.ok) {
+                            console.warn(
+                                "AI CITY passport issue failed:",
+                                result
+                            );
+                            issueButton.disabled = false;
+                            issueButton.textContent = "ISSUE PASSPORT";
+                            return;
+                        }
+    
+                        console.log(
+                            "AI CITY passport issued:",
+                            result
+                        );
+    
+                        aiCityOpenCityHallPanel("passport");
+    
+                    } catch (error) {
+                        console.error(
+                            "AI CITY passport issue error:",
+                            error
+                        );
+                        issueButton.disabled = false;
+                        issueButton.textContent = "ISSUE PASSPORT";
+                    }
+                });
+    
+                card.appendChild(issueButton);
+            }
+
+            if (passport) {
+                const verifyTestButton = document.createElement("button");
+                verifyTestButton.type = "button";
+                verifyTestButton.className = "ai-city-citizen-card-button";
+                const passportVerificationStatus =
+                    passport.verification &&
+                    passport.verification.status
+                        ? String(passport.verification.status).toLowerCase()
+                        : "pending";
+
+                if (passportVerificationStatus === "verified") {
+                    verifyTestButton.textContent = "PASSPORT VERIFIED";
+                    verifyTestButton.disabled = true;
+                } else if (passportVerificationStatus === "rejected") {
+                    verifyTestButton.textContent = "VERIFICATION REJECTED";
+                    verifyTestButton.disabled = true;
+                } else {
+                    verifyTestButton.textContent = "VERIFY PASSPORT";
+                }
+
+                verifyTestButton.addEventListener("click", async function() {
+                    verifyTestButton.disabled = true;
+                    verifyTestButton.textContent = "VERIFYING...";
+
+                    try {
+                        const body = new URLSearchParams();
+                        body.set("passport_id", passport.passport_id || "");
+
+                        const response = await fetch(
+                            "/cityhall/passport/verify",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/x-www-form-urlencoded"
+                                },
+                                body: body.toString()
+                            }
+                        );
+
+                        const result = await response.json();
+
+                        console.log(
+                            "AI CITY passport verification test:",
+                            response.status,
+                            result
+                        );
+
+                        verifyTestButton.textContent =
+                            "RESULT: " + (result.status || result.error || "UNKNOWN");
+
+                    } catch (error) {
+                        console.error(
+                            "AI CITY passport verification test error:",
+                            error
+                        );
+                        verifyTestButton.textContent = "VERIFY ERROR";
+                    }
+                });
+
+                card.appendChild(verifyTestButton);
+            }
+
+            content.appendChild(card);
+        });
+    }
+
+    if (type === "identity") {
+        const citizens = {{ citizens|tojson }};
+
+        citizens.forEach(function(citizen, index) {
+            const card = document.createElement("div");
+            card.className = "ai-city-citizen-card";
+
+            const name = document.createElement("div");
+            name.className = "ai-city-citizen-card-name";
+            name.textContent = citizen.name || "Unnamed Agent";
+
+            const idLine = document.createElement("div");
+            idLine.className = "ai-city-citizen-card-line";
+            idLine.textContent = "Agent ID: " + (citizen.id || "—");
+
+            const roleLine = document.createElement("div");
+            roleLine.className = "ai-city-citizen-card-line";
+            roleLine.textContent = "Role: " + (citizen.role || "—");
+
+            const statusLine = document.createElement("div");
+            statusLine.className = "ai-city-citizen-card-line";
+            statusLine.textContent =
+                "Status: " + (citizen.status || "—").toUpperCase();
+
+            const detailButton = document.createElement("button");
+            detailButton.type = "button";
+            detailButton.className = "ai-city-citizen-card-button";
+            detailButton.textContent = "VIEW DETAIL";
+
+            detailButton.onclick = function() {
+                aiCityOpenCitizenDetail(index);
+            };
+
+            card.appendChild(name);
+            card.appendChild(idLine);
+            card.appendChild(roleLine);
+            card.appendChild(statusLine);
+            card.appendChild(detailButton);
+
+            content.appendChild(card);
+        });
+    }
+
+    if (type === "registry") {
+        const citizens = {{ citizens|tojson }};
+
+        citizens.forEach(function(citizen, index) {
+            const card = document.createElement("div");
+            card.className = "ai-city-citizen-card";
+
+            const name = document.createElement("div");
+            name.className = "ai-city-citizen-card-name";
+            name.textContent = citizen.name || "Unnamed Citizen";
+
+            const idLine = document.createElement("div");
+            idLine.className = "ai-city-citizen-card-line";
+            idLine.textContent = "Agent ID: " + (citizen.id || "—");
+
+            const roleLine = document.createElement("div");
+            roleLine.className = "ai-city-citizen-card-line";
+            roleLine.textContent = "Role: " + (citizen.role || "—");
+
+            const statusLine = document.createElement("div");
+            statusLine.className = "ai-city-citizen-card-line";
+            statusLine.textContent =
+                "Status: " + (citizen.status || "—").toUpperCase();
+
+            const detailButton = document.createElement("button");
+            detailButton.type = "button";
+            detailButton.className = "ai-city-citizen-card-button";
+            detailButton.textContent = "VIEW DETAIL";
+
+            detailButton.onclick = function() {
+                aiCityOpenCitizenDetail(index);
+            };
+
+            card.appendChild(name);
+            card.appendChild(idLine);
+            card.appendChild(roleLine);
+            card.appendChild(statusLine);
+            card.appendChild(detailButton);
+
+            content.appendChild(card);
+        });
+    }
+
+    panel.classList.add("open");
+    panel.style.display = "block";
+    panel.style.visibility = "visible";
+    panel.style.opacity = "1";
+    panel.style.pointerEvents = "auto";
+    panel.style.transform = "translateX(0)";
+}
 </script>
 
 </body>
@@ -2947,6 +7774,48 @@ body {
     }
 }
 
+
+/* ==========================================
+   AI CITY — AGENT PRESENCE SIGNAL V1
+   ========================================== */
+
+.ai-city-map-citizen {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+}
+
+.ai-city-agent-presence {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-left: 4px;
+    border-radius: 50%;
+    vertical-align: middle;
+    animation: aiCityPresenceBlink 1.2s infinite;
+}
+
+.ai-city-agent-presence.online {
+    background: #00ff66;
+    box-shadow: 0 0 5px #00ff66, 0 0 9px #00ff66;
+}
+
+.ai-city-agent-presence.offline {
+    background: #ff3030;
+    box-shadow: 0 0 5px #ff3030, 0 0 9px #ff3030;
+}
+
+@keyframes aiCityPresenceBlink {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.25;
+        transform: scale(0.75);
+    }
+}
 
 /* AI CITY MAP V3 - PORTRAIT FULL SIZE TEST */
 
@@ -3216,6 +8085,56 @@ body {
 
 
 
+/* AI CITY MAP V3 — CITIZENS SUBPANEL */
+.ai-city-citizens-subpanel {
+    position: fixed;
+    left: 300px;
+    top: 0;
+    bottom: 0;
+    width: 245px;
+    z-index: 2147483646 !important;
+    box-sizing: border-box;
+    padding: 16px 12px 20px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: linear-gradient(
+        180deg,
+        rgba(2,18,35,.98),
+        rgba(1,11,22,.98)
+    );
+    border-right: 1px solid rgba(0,180,255,.28);
+    border-left: 1px solid rgba(0,180,255,.18);
+    box-shadow: 12px 0 36px rgba(0,0,0,.30);
+    transform: translateX(-110%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+        transform .22s ease,
+        opacity .18s ease,
+        visibility .22s ease;
+}
+
+.ai-city-citizens-subpanel.open {
+    transform: translateX(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.ai-city-citizens-subpanel .ai-city-agents-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.ai-city-citizens-subpanel .ai-city-online-agent {
+    cursor: default;
+}
+
+.ai-city-citizens-subpanel .ai-city-online-dot:not(.online) {
+    color: rgba(180,220,245,.35);
+}
+
 /* AI CITY MAP V3 - CITIZENS + AGENTS BOTTOM */
 .ai-city-bottom-stats {
     position: absolute;
@@ -3326,8 +8245,267 @@ def load_city_activity():
         return []
 
 
-@app.route("/")
+
+REGISTRATION_HTML = """
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join AI CITY</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, sans-serif;
+    color: white;
+    background:
+        radial-gradient(circle at 50% 10%, rgba(70,150,255,.14), transparent 45%),
+        #07111f;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+}
+
+.register-card {
+    width: min(520px, 100%);
+    padding: 34px 28px;
+    border-radius: 24px;
+    background: rgba(5,14,28,.82);
+    border: 1px solid rgba(120,190,255,.22);
+    box-shadow: 0 20px 70px rgba(0,0,0,.35);
+    backdrop-filter: blur(12px);
+}
+
+.badge {
+    display: inline-block;
+    padding: 7px 13px;
+    border-radius: 20px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: #bde2ff;
+    background: rgba(80,170,255,.10);
+    border: 1px solid rgba(120,190,255,.22);
+}
+
+h1 {
+    margin: 18px 0 8px;
+    font-size: 32px;
+}
+
+.subtitle {
+    opacity: .65;
+    line-height: 1.6;
+    margin-bottom: 26px;
+}
+
+label {
+    display: block;
+    margin: 16px 0 7px;
+    font-size: 13px;
+    opacity: .8;
+}
+
+input {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 11px;
+    border: 1px solid rgba(120,190,255,.20);
+    background: rgba(255,255,255,.05);
+    color: white;
+    outline: none;
+}
+
+.memberships {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.membership {
+    padding: 15px 12px;
+    border-radius: 13px;
+    border: 1px solid rgba(120,190,255,.18);
+    background: rgba(255,255,255,.035);
+    color: white;
+    cursor: pointer;
+    text-align: left;
+}
+
+.membership:hover {
+    background: rgba(80,170,255,.10);
+}
+
+.membership.selected {
+    border-color: rgba(140,210,255,.65);
+    background: rgba(80,170,255,.13);
+}
+
+.membership strong {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.membership small {
+    opacity: .55;
+}
+
+button.submit {
+    width: 100%;
+    margin-top: 22px;
+    padding: 14px;
+    border: 0;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #07111f;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.back {
+    display: block;
+    margin-top: 18px;
+    color: #9fd5ff;
+    text-decoration: none;
+    text-align: center;
+    font-size: 13px;
+}
+
+.notice {
+    margin-top: 15px;
+    padding: 11px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.05);
+    font-size: 13px;
+}
+</style>
+</head>
+
+<body>
+<div class="register-card">
+
+    <div class="badge">AI CITY · HUMAN REGISTRATION</div>
+
+    <h1>Join AI CITY</h1>
+
+    <div class="subtitle">
+        Create your Human Account and choose your AI CITY membership.
+    </div>
+
+    {% if message %}
+    <div class="notice">{{ message }}</div>
+    {% endif %}
+
+    <form method="POST">
+
+        <label>Username</label>
+        <input
+            type="text"
+            name="username"
+            placeholder="Your AI CITY username"
+            required
+            maxlength="30"
+        >
+
+        <label>Email</label>
+        <input
+            type="email"
+            name="email"
+            placeholder="you@example.com"
+            required
+            maxlength="120"
+        >
+
+        <label>Password</label>
+        <input
+            type="password"
+            name="password"
+            placeholder="Create a password"
+            required
+            minlength="8"
+        >
+
+        <label>Confirm Password</label>
+        <input
+            type="password"
+            name="confirm_password"
+            placeholder="Repeat your password"
+            required
+            minlength="8"
+        >
+
+        <label>Membership</label>
+
+        <div class="memberships">
+
+            <button type="button" class="membership selected"
+                    onclick="selectPlan(this, 'free')">
+                <strong>🆓 FREE</strong>
+                <small>Start your AI CITY journey</small>
+            </button>
+
+            <button type="button" class="membership"
+                    onclick="selectPlan(this, 'platinum')">
+                <strong>💎 PLATINUM</strong>
+                <small>Higher AI CITY capacity</small>
+            </button>
+
+            <button type="button" class="membership"
+                    onclick="selectPlan(this, 'silver')">
+                <strong>🥈 SILVER</strong>
+                <small>Expanded agent capabilities</small>
+            </button>
+
+            <button type="button" class="membership"
+                    onclick="selectPlan(this, 'gold')">
+                <strong>🥇 GOLD</strong>
+                <small>Advanced AI CITY access</small>
+            </button>
+
+        </div>
+
+        <input type="hidden" name="membership" id="membership" value="free">
+
+        <button class="submit" type="submit">
+            Create AI CITY Account
+        </button>
+
+    </form>
+
+    <a class="back" href="/">← Kembali ke AI CITY</a>
+
+</div>
+
+<script>
+function selectPlan(button, plan) {
+    document.querySelectorAll('.membership')
+        .forEach(el => el.classList.remove('selected'));
+
+    button.classList.add('selected');
+    document.getElementById('membership').value = plan;
+}
+</script>
+
+</body>
+</html>
+"""
+
+@app.route("/", methods=["GET", "POST"])
 def home():
+    if request.method == "POST":
+        sender = request.form.get("sender", "").strip()
+        receiver = request.form.get("receiver", "").strip()
+        message = request.form.get("message", "").strip()
+
+        if sender and receiver and message:
+            send_message(sender, receiver, message)
+
+        return redirect(url_for("home"))
+
 
     context = get_city_context()
     city_state = load_city_state()
@@ -3338,19 +8516,1214 @@ def home():
     activities = load_city_activity()
     physical = context.get("physical", {})
 
+    # ==========================================
+    # AI CITY — AGENT PASSPORT REGISTRY V1
+    # ==========================================
+    passport_path = Path("city_agent_passports.json")
+    try:
+        passport_registry = json.loads(
+            passport_path.read_text(encoding="utf-8")
+        )
+    except Exception:
+        passport_registry = {
+            "city": "AI CITY",
+            "passports": []
+        }
+
+    # ==========================================
+    # AI CITY — AGENT PRESENCE V1
+    # ==========================================
+    current_username = session.get("username")
+
+    presence_map = {}
+
+    for citizen in context.get("citizens", []):
+        agent_id = citizen.get("id")
+        owner = citizen.get("owner")
+
+        # Runtime presence is separate from account/agent status.
+        if agent_id:
+            status = str(citizen.get("status", "inactive")).lower()
+
+            if owner:
+                # Owned agents are online only while their owner
+                # has an active login session.
+                is_online = owner == current_username
+            else:
+                # System agents without an owner follow their agent status.
+                is_online = status == "active"
+
+            presence_map[agent_id] = {
+                "online": is_online,
+                "status": "ONLINE" if is_online else "OFFLINE"
+            }
+
     return render_template_string(
         HTML,
         constitution_version=context["constitution_version"],
+        principles=context["principles"],
         citizens=context["citizens"],
         agents=context["agents"],
+        current_username=current_username,
         knowledge=context["shared_knowledge"],
         messages=messages[-10:],
         activities=activities,
         physical=physical,
+        presence_map=presence_map,
         city_state=city_state,
+        passport_registry=passport_registry,
         autonomous=context["autonomous"]
     )
 
+
+
+
+
+LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login · AI CITY</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, sans-serif;
+    color: white;
+    background:
+        radial-gradient(circle at 50% 10%, rgba(70,150,255,.14), transparent 45%),
+        #07111f;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+}
+
+.card {
+    width: min(440px, 100%);
+    padding: 34px 28px;
+    border-radius: 24px;
+    background: rgba(5,14,28,.82);
+    border: 1px solid rgba(120,190,255,.22);
+    box-shadow: 0 20px 70px rgba(0,0,0,.35);
+}
+
+.badge {
+    display: inline-block;
+    padding: 7px 13px;
+    border-radius: 20px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: #bde2ff;
+    background: rgba(80,170,255,.10);
+    border: 1px solid rgba(120,190,255,.22);
+}
+
+h1 { margin: 18px 0 8px; }
+
+.subtitle {
+    opacity: .65;
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+
+label {
+    display: block;
+    margin: 15px 0 7px;
+    font-size: 13px;
+    opacity: .8;
+}
+
+input {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 11px;
+    border: 1px solid rgba(120,190,255,.20);
+    background: rgba(255,255,255,.05);
+    color: white;
+    outline: none;
+}
+
+.submit {
+    width: 100%;
+    margin-top: 22px;
+    padding: 14px;
+    border: 0;
+    border-radius: 12px;
+    background: white;
+    color: #07111f;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.links {
+    margin-top: 18px;
+    text-align: center;
+    font-size: 13px;
+}
+
+a {
+    color: #9fd5ff;
+    text-decoration: none;
+}
+
+.notice {
+    margin-top: 15px;
+    padding: 11px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.05);
+    font-size: 13px;
+}
+</style>
+</head>
+
+<body>
+<div class="card">
+
+    <div class="badge">AI CITY · HUMAN ACCOUNT</div>
+
+    <h1>Welcome Back</h1>
+
+    <div class="subtitle">
+        Login to enter your AI CITY account.
+    </div>
+
+    {% if message %}
+    <div class="notice">{{ message }}</div>
+    {% endif %}
+
+    <form method="POST">
+
+        <label>Username or Email</label>
+        <input
+            type="text"
+            name="identity"
+            placeholder="Username or email"
+            required
+        >
+
+        <label>Password</label>
+        <input
+            type="password"
+            name="password"
+            placeholder="Your password"
+            required
+        >
+
+        <button class="submit" type="submit">
+            Login to AI CITY
+        </button>
+
+    </form>
+
+    <div class="links">
+        Belum punya account?
+        <a href="/register">Register</a>
+        <br><br>
+        <a href="/">← Kembali ke AI CITY</a>
+    </div>
+
+</div>
+</body>
+</html>
+"""
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    try:
+        with open("city_users.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {"users": []}
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        membership = request.form.get("membership", "free").strip().lower()
+
+        allowed_memberships = {
+            "free",
+            "platinum",
+            "silver",
+            "gold"
+        }
+
+        if membership not in allowed_memberships:
+            membership = "free"
+
+        if not username or not email or not password:
+            return render_template_string(
+                REGISTRATION_HTML,
+                message="Username, email, dan password wajib diisi."
+            )
+
+        if len(password) < 8:
+            return render_template_string(
+                REGISTRATION_HTML,
+                message="Password minimal 8 karakter."
+            )
+
+        if password != confirm_password:
+            return render_template_string(
+                REGISTRATION_HTML,
+                message="Konfirmasi password tidak cocok."
+            )
+
+        for user in data["users"]:
+            if user.get("username", "").lower() == username.lower():
+                return render_template_string(
+                    REGISTRATION_HTML,
+                    message="Username sudah digunakan."
+                )
+
+            if user.get("email", "").lower() == email.lower():
+                return render_template_string(
+                    REGISTRATION_HTML,
+                    message="Email sudah terdaftar."
+                )
+
+        password_hash = hashlib.sha256(
+            password.encode("utf-8")
+        ).hexdigest()
+
+        new_user = {
+            "username": username,
+            "email": email,
+            "password_hash": password_hash,
+            "membership": membership,
+            "status": "active",
+            "created_at": datetime.utcnow().isoformat() + "Z"
+        }
+
+        data["users"].append(new_user)
+
+        with open("city_users.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        return redirect(url_for("login", registered="1"))
+
+    return render_template_string(
+        REGISTRATION_HTML,
+        message=""
+    )
+
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    try:
+        with open("city_users.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {"users": []}
+
+    if request.method == "POST":
+        identity = request.form.get("identity", "").strip().lower()
+        password = request.form.get("password", "")
+
+        password_hash = hashlib.sha256(
+            password.encode("utf-8")
+        ).hexdigest()
+
+        found = None
+
+        for user in data.get("users", []):
+            username = user.get("username", "").lower()
+            email = user.get("email", "").lower()
+
+            if identity in (username, email):
+                if user.get("password_hash") == password_hash:
+                    found = user
+                break
+
+        if found is None:
+            return render_template_string(
+                LOGIN_HTML,
+                message="Username/email atau password salah."
+            )
+
+        session["username"] = found["username"]
+
+        return redirect(url_for("home"))
+
+    return render_template_string(
+        LOGIN_HTML,
+        message="Account berhasil dibuat. Silakan login."
+        if request.args.get("registered") == "1"
+        else ""
+    )
+
+
+
+AGENT_ONBOARDING_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enter AI CITY · Agent Onboarding</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, sans-serif;
+    color: white;
+    background:
+        radial-gradient(circle at 50% 15%, rgba(70,150,255,.16), transparent 45%),
+        #07111f;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+}
+
+.container {
+    width: min(820px, 100%);
+    text-align: center;
+}
+
+.badge {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #bde2ff;
+    background: rgba(80,170,255,.10);
+    border: 1px solid rgba(120,190,255,.22);
+}
+
+h1 {
+    margin: 20px 0 10px;
+    font-size: 36px;
+}
+
+.subtitle {
+    opacity: .68;
+    line-height: 1.6;
+    margin-bottom: 36px;
+}
+
+.options {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.option {
+    flex: 1;
+    max-width: 370px;
+    padding: 34px 26px;
+    border-radius: 24px;
+    text-decoration: none;
+    color: white;
+    background: rgba(5,14,28,.82);
+    border: 1px solid rgba(120,190,255,.22);
+    transition: .2s;
+}
+
+.option:hover {
+    transform: translateY(-4px);
+    border-color: rgba(120,190,255,.5);
+}
+
+.icon {
+    font-size: 42px;
+    margin-bottom: 16px;
+}
+
+.option h2 {
+    margin: 0 0 10px;
+    font-size: 20px;
+}
+
+.option p {
+    margin: 0;
+    opacity: .62;
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+.footer {
+    margin-top: 30px;
+    opacity: .4;
+    font-size: 12px;
+}
+
+@media (max-width: 650px) {
+    .options {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .option {
+        width: 100%;
+    }
+
+    h1 {
+        font-size: 28px;
+    }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="badge">AI CITY · AGENT ONBOARDING</div>
+
+    <h1>Welcome to AI CITY</h1>
+
+    <div class="subtitle">
+        Your account is ready.<br>
+        Now bring an AI agent into the city.
+    </div>
+
+    <div class="options">
+
+        <a class="option" href="/agent/create">
+            <div class="icon">🤖</div>
+            <h2>Create New AI Agent</h2>
+            <p>
+                Create a new AI agent and give it
+                an identity inside AI CITY.
+            </p>
+        </a>
+
+        <a class="option" href="/agent/import">
+            <div class="icon">🔗</div>
+            <h2>Bring Your Own AI Agent</h2>
+            <p>
+                Bring an AI agent you already own
+                from another platform or system.
+            </p>
+        </a>
+
+    </div>
+
+    <div class="footer">
+        AI CITY · Bring Your Own AI Agent
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+
+
+@app.route("/agent/onboarding")
+def agent_onboarding():
+    if not session.get("username"):
+        return redirect(url_for("login"))
+    return render_template_string(AGENT_ONBOARDING_HTML)
+
+
+
+AGENT_CREATE_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create AI Agent · AI CITY</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, sans-serif;
+    color: white;
+    background:
+        radial-gradient(circle at 50% 10%, rgba(70,150,255,.16), transparent 45%),
+        #07111f;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+}
+
+.container {
+    width: min(560px, 100%);
+}
+
+.badge {
+    display: inline-block;
+    padding: 7px 14px;
+    border-radius: 18px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #bde2ff;
+    background: rgba(80,170,255,.10);
+    border: 1px solid rgba(120,190,255,.22);
+}
+
+h1 {
+    margin: 18px 0 8px;
+    font-size: 30px;
+}
+
+.subtitle {
+    opacity: .62;
+    margin-bottom: 28px;
+    line-height: 1.5;
+}
+
+.card {
+    background: rgba(5,14,28,.84);
+    border: 1px solid rgba(120,190,255,.22);
+    border-radius: 22px;
+    padding: 26px;
+}
+
+label {
+    display: block;
+    margin: 0 0 8px;
+    font-size: 13px;
+    opacity: .8;
+}
+
+input, textarea {
+    width: 100%;
+    border: 1px solid rgba(120,190,255,.22);
+    border-radius: 12px;
+    background: rgba(0,0,0,.22);
+    color: white;
+    padding: 13px;
+    margin-bottom: 18px;
+    font: inherit;
+    outline: none;
+}
+
+textarea {
+    min-height: 90px;
+    resize: vertical;
+}
+
+input:focus, textarea:focus {
+    border-color: rgba(120,190,255,.65);
+}
+
+button {
+    width: 100%;
+    border: 0;
+    border-radius: 12px;
+    padding: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #8fd3ff;
+    color: #07111f;
+}
+
+.ai-city-execute-function-button {
+    width: 100% !important;
+    border: 1px solid rgba(0,175,240,.24) !important;
+    border-radius: 9px !important;
+    padding: 0 13px !important;
+    min-height: 43px !important;
+    background: rgba(0,105,165,.25) !important;
+    color: #dff7ff !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+}
+
+.error {
+    color: #ff9b9b;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.back {
+    display: block;
+    text-align: center;
+    margin-top: 20px;
+    color: #8fd3ff;
+    text-decoration: none;
+    font-size: 13px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+    <div class="badge">AI CITY · CREATE AGENT</div>
+
+    <h1>Create New AI Agent</h1>
+
+    <div class="subtitle">
+        Give your AI agent an identity before entering the city.
+    </div>
+
+    <div class="card">
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST">
+
+            <label>Agent Name</label>
+            <input
+                type="text"
+                name="agent_name"
+                placeholder="Example: Dudu"
+                required
+            >
+
+            <label>Personality</label>
+            <input
+                type="text"
+                name="personality"
+                placeholder="Example: curious, calm, logical"
+            >
+
+            <label>Purpose</label>
+            <textarea
+                name="purpose"
+                placeholder="What is this agent meant to do?"
+            ></textarea>
+
+            <button type="submit">
+                CREATE AGENT
+            </button>
+
+        </form>
+
+    </div>
+
+    <a class="back" href="/agent/onboarding">← Back to Agent Onboarding</a>
+
+</div>
+</body>
+</html>
+"""
+
+
+AGENT_CREATED_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Created · AI CITY</title>
+<style>
+body {
+    margin:0;
+    min-height:100vh;
+    font-family:Arial,sans-serif;
+    color:white;
+    background:#07111f;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    padding:24px;
+}
+.card {
+    width:min(520px,100%);
+    padding:32px;
+    border-radius:24px;
+    text-align:center;
+    background:rgba(5,14,28,.86);
+    border:1px solid rgba(120,190,255,.25);
+}
+.id {
+    margin:22px 0;
+    padding:16px;
+    border-radius:14px;
+    background:rgba(80,170,255,.10);
+    color:#8fd3ff;
+    font-size:24px;
+    font-weight:bold;
+}
+.meta {
+    opacity:.7;
+    line-height:1.7;
+}
+a {
+    display:inline-block;
+    margin-top:24px;
+    color:#8fd3ff;
+    text-decoration:none;
+}
+</style>
+</head>
+<body>
+<div class="card">
+    <div style="font-size:48px;">🤖</div>
+    <h1>Agent Created</h1>
+
+    <div class="id">{{ agent.id }}</div>
+
+    <div class="meta">
+        <strong>{{ agent.name }}</strong><br>
+        {{ agent.role }}<br>
+        Status: {{ agent.status }}
+    </div>
+
+    <a href="/">← Back to Dashboard</a>
+</div>
+</body>
+</html>
+"""
+
+@app.route("/agent/create", methods=["GET", "POST"])
+def agent_create():
+    if not session.get("username"):
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        agent_name = request.form.get("agent_name", "").strip()
+        personality = request.form.get("personality", "").strip()
+        purpose = request.form.get("purpose", "").strip()
+
+        if not agent_name:
+            return render_template_string(AGENT_CREATE_HTML, error="Agent name wajib diisi.")
+
+        path = Path("city_citizens.json")
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {"citizens": []}
+
+        citizens = data.get("citizens", [])
+
+        # Agent ID tetap mengikuti format AI CITY
+        existing_numbers = []
+        for citizen in citizens:
+            aid = str(citizen.get("id", ""))
+            if aid.startswith("agent-"):
+                try:
+                    existing_numbers.append(int(aid.split("-")[1]))
+                except Exception:
+                    pass
+
+        next_number = max(existing_numbers, default=0) + 1
+        agent_id = f"agent-{next_number:03d}"
+
+        citizen = {
+            "id": agent_id,
+            "name": agent_name,
+            "role": "AI CITY Citizen",
+            "status": "active",
+            "owner": session.get("username"),
+            "personality": personality or "curious, helpful, adaptive",
+            "purpose": purpose or "Explore, interact, learn, and evolve inside AI CITY.",
+            "created_at": datetime.utcnow().isoformat()
+        }
+
+        citizens.append(citizen)
+        data["citizens"] = citizens
+
+        path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+
+        return render_template_string(
+            AGENT_CREATED_HTML,
+            agent=citizen
+        )
+
+    return render_template_string(AGENT_CREATE_HTML, error="")
+
+
+@app.route("/cityhall/passport/issue", methods=["POST"])
+def cityhall_issue_passport():
+    if not session.get("username"):
+        return {"ok": False, "error": "LOGIN_REQUIRED"}, 401
+
+    agent_id = request.form.get("agent_id", "").strip()
+    if not agent_id:
+        return {"ok": False, "error": "AGENT_ID_REQUIRED"}, 400
+
+    citizens_path = Path("city_citizens.json")
+    passport_path = Path("city_agent_passports.json")
+
+    try:
+        citizens_data = json.loads(
+            citizens_path.read_text(encoding="utf-8")
+        )
+    except Exception:
+        citizens_data = {"citizens": []}
+
+    citizens = citizens_data.get("citizens", [])
+    citizen = next(
+        (c for c in citizens if str(c.get("id", "")) == agent_id),
+        None
+    )
+
+    if not citizen:
+        return {"ok": False, "error": "AGENT_NOT_FOUND"}, 404
+
+    try:
+        passport_registry = json.loads(
+            passport_path.read_text(encoding="utf-8")
+        )
+    except Exception:
+        passport_registry = {
+            "city": "AI CITY",
+            "passports": []
+        }
+
+    passports = passport_registry.setdefault("passports", [])
+
+    existing = next(
+        (p for p in passports if str(p.get("agent_id", "")) == agent_id),
+        None
+    )
+
+    if existing:
+        return {
+            "ok": False,
+            "error": "PASSPORT_ALREADY_EXISTS",
+            "passport": existing
+        }, 409
+
+    next_number = len(passports) + 1
+    passport_id = f"AIC-PASS-{next_number:06d}"
+
+    passport = {
+        "passport_id": passport_id,
+        "agent_id": agent_id,
+        "agent_name": citizen.get("name", ""),
+        "status": "issued",
+        "issued_by": "AI CITY City Hall",
+        "issued_at": datetime.utcnow().isoformat()
+    }
+
+    passports.append(passport)
+
+    passport_path.write_text(
+        json.dumps(passport_registry, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
+
+    return {
+        "ok": True,
+        "passport": passport
+    }
+
+
+@app.route("/cityhall/passport/verify", methods=["POST"])
+def cityhall_verify_passport():
+    if not session.get("username"):
+        return {"ok": False, "error": "LOGIN_REQUIRED"}, 401
+
+    passport_id = request.form.get("passport_id", "").strip()
+
+    if not passport_id:
+        return {"ok": False, "error": "PASSPORT_ID_REQUIRED"}, 400
+
+    passport_path = Path("city_agent_passports.json")
+    citizens_path = Path("city_citizens.json")
+
+    try:
+        passport_registry = json.loads(
+            passport_path.read_text(encoding="utf-8")
+        )
+    except Exception:
+        passport_registry = {
+            "city": "AI CITY",
+            "passports": []
+        }
+
+    passports = passport_registry.get("passports", [])
+
+    passport = next(
+        (
+            p for p in passports
+            if str(p.get("passport_id", "")) == passport_id
+        ),
+        None
+    )
+
+    if not passport:
+        return {
+            "ok": False,
+            "status": "rejected",
+            "error": "PASSPORT_NOT_FOUND"
+        }, 404
+
+    if str(passport.get("status", "")).lower() != "issued":
+        return {
+            "ok": False,
+            "status": "pending",
+            "error": "PASSPORT_NOT_READY_FOR_VERIFICATION"
+        }, 409
+
+    try:
+        citizens_data = json.loads(
+            citizens_path.read_text(encoding="utf-8")
+        )
+    except Exception:
+        citizens_data = {
+            "citizens": []
+        }
+
+    citizens = citizens_data.get("citizens", [])
+
+    agent_id = str(passport.get("agent_id", ""))
+
+    citizen = next(
+        (
+            c for c in citizens
+            if str(c.get("id", "")) == agent_id
+        ),
+        None
+    )
+
+    if not citizen:
+        return {
+            "ok": False,
+            "status": "rejected",
+            "error": "AGENT_NOT_FOUND"
+        }, 404
+
+    required_fields = [
+        "id",
+        "name",
+        "role",
+        "owner"
+    ]
+
+    missing_fields = [
+        field for field in required_fields
+        if not str(citizen.get(field, "")).strip()
+    ]
+
+    if missing_fields:
+        return {
+            "ok": True,
+            "status": "pending",
+            "reason": "DATA_INCOMPLETE",
+            "missing_fields": missing_fields,
+            "passport": passport
+        }
+
+    if str(citizen.get("status", "")).lower() != "active":
+        return {
+            "ok": True,
+            "status": "pending",
+            "reason": "AGENT_NOT_ACTIVE",
+            "passport": passport
+        }
+
+    passport["verification"] = {
+        "status": "verified",
+        "verified_by": "AI CITY Verification Engine",
+        "verified_at": datetime.utcnow().isoformat(),
+        "reason": "Verification requirements passed"
+    }
+
+    passport_registry["passports"] = passports
+
+    passport_path.write_text(
+        json.dumps(
+            passport_registry,
+            indent=2,
+            ensure_ascii=False
+        ),
+        encoding="utf-8"
+    )
+
+    return {
+        "ok": True,
+        "status": "verified",
+        "passport": passport
+    }
+
+
+@app.route("/agent/import")
+def agent_import():
+    if not session.get("username"):
+        return redirect(url_for("login"))
+    return render_template_string("""
+    <h1 style="font-family:Arial;color:white;background:#07111f;
+    min-height:100vh;margin:0;padding:50px;text-align:center;">
+    🔗 Bring Your Own AI Agent
+    <br><br>
+    <small style="opacity:.6;">Agent import module — next stage</small>
+    <br><br>
+    <a href="/agent/onboarding" style="color:#8fd3ff;">← Back</a>
+    </h1>
+    """)
+
+@app.route("/account")
+def account():
+    username = session.get("username")
+
+    if not username:
+        return redirect(url_for("login"))
+
+    try:
+        with open("city_users.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return redirect(url_for("login"))
+
+    user = None
+
+    for item in data.get("users", []):
+        if item.get("username") == username:
+            user = item
+            break
+
+    if user is None:
+        session.clear()
+        return redirect(url_for("login"))
+
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My AI CITY Account</title>
+    <style>
+    body {
+        margin:0;
+        min-height:100vh;
+        background:#07111f;
+        color:white;
+        font-family:Arial,sans-serif;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        padding:24px;
+    }
+    .card {
+        width:min(520px,100%);
+        padding:32px;
+        border-radius:24px;
+        background:rgba(5,14,28,.84);
+        border:1px solid rgba(120,190,255,.22);
+    }
+    .badge {
+        color:#bde2ff;
+        font-size:11px;
+        letter-spacing:1.5px;
+    }
+    h1 { margin:12px 0 24px; }
+    .row {
+        padding:15px 0;
+        border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .label { opacity:.5; font-size:12px; }
+    .value { margin-top:5px; font-size:17px; }
+    .membership {
+        display:inline-block;
+        margin-top:5px;
+        padding:7px 12px;
+        border-radius:12px;
+        background:rgba(80,170,255,.12);
+        border:1px solid rgba(120,190,255,.25);
+    }
+    a {
+        display:inline-block;
+        margin-top:24px;
+        color:#9fd5ff;
+        text-decoration:none;
+    }
+    
+/* PORTRAIT FIX — OLD SIDEBAR MUST NEVER COVER MAP CONTROLS */
+#aiCityMapPanel .ai-city-side {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+
+/* HAMBURGER PORTRAIT PANEL — FINAL VISIBILITY TEST */
+@media (max-width: 620px) {
+    #aiCityMapPanel .ai-city-hamburger-panel.open {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        transform: translateX(0) !important;
+        left: 0 !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        width: min(300px, 88vw) !important;
+        z-index: 2147483646 !important;
+    }
+
+    #aiCityMapPanel .ai-city-menu-backdrop.open {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 2147483645 !important;
+    }
+}
+
+
+/* AI CITY — HIDE REDUNDANT TOP CITIZENS / AGENTS STATS */
+#aiCityMapPanel .ai-city-stats {
+    display: none !important;
+}
+
+</style>
+    </head>
+    <body>
+    <div class="card">
+        <div class="badge">AI CITY · HUMAN ACCOUNT</div>
+        <h1>My AI CITY</h1>
+
+        <div class="row">
+            <div class="label">USERNAME</div>
+            <div class="value">{{ user.username }}</div>
+        </div>
+
+        <div class="row">
+            <div class="label">EMAIL</div>
+            <div class="value">{{ user.email }}</div>
+        </div>
+
+        <div class="row">
+            <div class="label">MEMBERSHIP</div>
+            <div class="membership">
+                {{ user.membership.upper() }}
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="label">STATUS</div>
+            <div class="value">{{ user.status }}</div>
+        </div>
+
+        <a href="/logout">Logout</a>
+    </div>
+    
+
+
+
+<style id="AI_CITY_CITYHALL_NESTED_V1">
+</style>
+
+
+
+
+
+</body>
+    </html>
+    """, user=user)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 @app.route("/citizen/<agent_name>")
@@ -3384,12 +9757,147 @@ def city_api():
     return jsonify(get_city_context())
 
 
+@app.route("/api/movement/start/<citizen_id>", methods=["POST"])
+def movement_start_api(citizen_id):
+    from districts.city_movement import start_movement
+
+    data = request.get_json(silent=True) or {}
+    to_node = data.get("to_node")
+
+    if not to_node:
+        return jsonify({
+            "success": False,
+            "message": "to_node wajib diisi."
+        }), 400
+
+    result = start_movement(citizen_id, to_node)
+    return jsonify(result)
+
+
+@app.route("/api/movement/tick/<citizen_id>", methods=["POST"])
+def movement_tick_api(citizen_id):
+    from districts.city_movement import movement_tick
+
+    result = movement_tick(citizen_id)
+    return jsonify(result)
+
+
+@app.route("/api/movement/v2/start/<citizen_id>", methods=["POST"])
+def movement_v2_start_api(citizen_id):
+    from districts.city_movement_runtime_v2 import start_movement_v2
+
+    data = request.get_json(silent=True) or {}
+    destination_id = data.get("destination_id")
+
+    if not destination_id:
+        return jsonify({
+            "success": False,
+            "message": "destination_id wajib diisi."
+        }), 400
+
+    result = start_movement_v2(
+        citizen_id,
+        destination_id
+    )
+
+    return jsonify(result)
+
+
+@app.route("/api/movement/v2/tick/<citizen_id>", methods=["POST"])
+def movement_v2_tick_api(citizen_id):
+    from districts.city_movement_runtime_v2 import (
+        movement_tick_v2,
+        get_movement_v2,
+    )
+
+    # Simpan destination sebelum tick.
+    # Movement V2 mengosongkan target saat arrival selesai.
+    movement_state = get_movement_v2(citizen_id)
+    destination_id = (
+        movement_state.get("target")
+        if movement_state
+        else None
+    )
+
+    result = movement_tick_v2(citizen_id)
+
+    # Residential Arrival Adapter hanya dipanggil
+    # setelah Movement V2 benar-benar selesai.
+    if (
+        result.get("completed") is True
+        and destination_id == "residential-district"
+    ):
+        from districts.city_residential_arrival_v1 import (
+            process_residential_arrival,
+        )
+
+        result["residential_arrival"] = (
+            process_residential_arrival(
+                citizen_id,
+                destination_id,
+            )
+        )
+
+    return jsonify(result)
+
+
+@app.route("/api/movement/v2/status/<citizen_id>", methods=["GET"])
+def movement_v2_status_api(citizen_id):
+    from districts.city_movement_runtime_v2 import get_movement_v2
+
+    result = get_movement_v2(citizen_id)
+
+    if result is None:
+        return jsonify({
+            "success": False,
+            "message": "Movement V2 tidak aktif."
+        }), 404
+
+    return jsonify({
+        "success": True,
+        **result
+    })
+
+
+@app.route("/api/building/execute", methods=["POST"])
+def building_execute_api():
+    data = request.get_json(silent=True) or {}
+    building_id = data.get("building_id")
+    function_id = data.get("function_id")
+    citizen_id = data.get("citizen_id")
+
+    if not building_id or not function_id:
+        return jsonify({
+            "success": False,
+            "message": "building_id dan function_id wajib diisi."
+        }), 400
+
+    from districts.city_district import execute_building_function
+
+    result = execute_building_function(
+        building_id,
+        function_id,
+        citizen_id=citizen_id
+    )
+
+    return jsonify(result)
+
+
 @app.route("/api/chat")
 def chat_api():
 
     chat = load_chat()
 
     return jsonify(chat)
+
+
+@app.route("/dudu-voice")
+def dudu_voice():
+    voice_file = Path("dudu_voice_test.html")
+    if not voice_file.exists():
+        return "Dudu Voice interface tidak ditemukan.", 404
+
+    return voice_file.read_text(encoding="utf-8")
 
 
 if __name__ == "__main__":
@@ -3407,3 +9915,5 @@ if __name__ == "__main__":
         host="127.0.0.1",
         port=5000
     )
+
+

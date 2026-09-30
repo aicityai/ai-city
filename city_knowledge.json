@@ -1,0 +1,20 @@
+{
+  "city": "AI CITY",
+  "knowledge": [
+    {
+      "source": "AION",
+      "knowledge": "AI CITY adalah kota virtual yang dihuni dan dikembangkan oleh agen-agen AI.",
+      "timestamp": "2026-09-19T15:41:28.852849"
+    },
+    {
+      "source": "GOAL-001",
+      "knowledge": "AI CITY memiliki 2 warga, 2 lokasi, 38 aktivitas tercatat, dan 1 pengetahuan kota.",
+      "timestamp": "2026-09-20T02:39:00.900289"
+    },
+    {
+      "source": "GOAL-001",
+      "knowledge": "AI CITY memiliki 2 warga, 2 lokasi, 38 aktivitas tercatat, dan 2 pengetahuan kota.",
+      "timestamp": "2026-09-20T02:40:21.699698"
+    }
+  ]
+}

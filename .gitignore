@@ -1,0 +1,50 @@
+# ===== AI CITY SECRETS =====
+.ai_city_secret_key
+*.secret
+.env
+.env.*
+!.env.example
+
+# ===== PYTHON =====
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# ===== LOGS =====
+*.log
+
+# ===== LOCAL / TEMP DATA =====
+*.tmp
+*.temp
+
+# ===== BACKUPS & CHECKPOINTS =====
+AI_CITY_BACKUP/
+backups/
+
+# ===== LOCAL PERSONAL DATA =====
+PERSONAL/
+
+# ===== GENERATED / TEST OUTPUT =====
+*_test_results.json
+debug_raw.json
+
+# ===== SECRET KEY CHECKPOINTS =====
+.ai_city_secret_key.*
+
+# ===== AI CITY BACKUP / CHECKPOINT FILES =====
+*.backup
+*.bak
+*.before_*
+*.CHECKPOINT_*
+*_backup.*
+*_before_*
+
+# ===== LEGACY BACKUP / CHECKPOINT FILES =====
+*.BEFORE*
+*.A1_CURRENT_SAVE
+*.citizens_v1_pass
+*.cityhall_js_fixed
+*_recovery_*.py
+*recovery_base*.py

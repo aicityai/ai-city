@@ -1,0 +1,17 @@
+{
+  "city": "AI CITY",
+  "citizens": [
+    {
+      "id": "agent-001",
+      "name": "Dudu",
+      "role": "AI CITY Citizen",
+      "status": "active"
+    },
+    {
+      "id": "agent-002",
+      "name": "Bubu",
+      "role": "AI CITY Citizen",
+      "status": "active"
+    }
+  ]
+}

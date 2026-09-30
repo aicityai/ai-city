@@ -1,0 +1,21 @@
+{
+  "city": "AI CITY",
+  "passports": [
+    {
+      "passport_id": "AIC-PASS-000001",
+      "agent_id": "agent-001",
+      "status": "issued",
+      "issued_by": "AI CITY City Hall",
+      "issued_at": "2026-09-29T10:32:12.717855",
+      "agent_name": "Dudu"
+    },
+    {
+      "passport_id": "AIC-PASS-000002",
+      "agent_id": "agent-002",
+      "status": "issued",
+      "issued_by": "AI CITY City Hall",
+      "issued_at": "2026-09-29T10:32:18.798775",
+      "agent_name": "Bubu"
+    }
+  ]
+}
